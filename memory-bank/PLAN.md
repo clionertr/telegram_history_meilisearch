@@ -32,8 +32,9 @@
             *   确保 Meilisearch 服务可以通过 `http://localhost:7700` 访问，并设置一个安全的 `MASTER_KEY` (AI 生成并记录在 `.env` 中)。
         *   **Python (后端):**
             *   创建并激活 Python 虚拟环境 (如 `venv`)。
-            *   根据 `FOLLOWME.md` 技术选型，在 `requirements.txt` 中列出核心依赖 (Telethon, meilisearch-python, python-telegram-bot, FastAPI, python-dotenv, Pydantic)。
+            *   根据 `FOLLOWME.md` 技术选型，在 `requirements.txt` 中列出核心依赖 (Telethon (用于 Userbot 和 Search Bot), meilisearch-python, FastAPI, python-dotenv, Pydantic, uvicorn)。
             *   执行 `pip install -r requirements.txt`。
+            *   Python 版本将通过项目根目录下的 pyproject.toml 文件中的 `requires-python` 字段（例如 `requires-python = ">=3.9"`）进行约束，并由 `uv` 在创建虚拟环境时遵循此设置。
         *   **Node.js (前端 - 预备):**
             *   (此阶段仅做环境检查，实际安装在前端阶段进行) 检查 Node.js 和 npm/yarn 是否已安装。
         *   创建 `.env.example` 文件，列出所有需要的环境变量（如 `TELEGRAM_API_ID`, `TELEGRAM_API_HASH`, `BOT_TOKEN`, `MEILISEARCH_HOST`, `MEILISEARCH_API_KEY` 等）。
@@ -85,28 +86,29 @@
         *   记录到 `memory-bank/activeContext.md`。
 8.  **任务：** `search_bot/message_formatters.py` 开发。
     *   **AI 行动：**
-        *   实现 `format_search_results()`，包括分页逻辑。
+        *   实现 `format_search_results()`，处理来自 Meilisearch 的结果，并准备发送给用户的消息格式。其输入可能需要根据 Telethon 的消息对象特性进行调整（例如，如何构建回复）。
         *   编写单元测试。
         *   记录到 `memory-bank/activeContext.md`。
 9.  **任务：** `search_bot/command_handlers.py` 开发。
     *   **AI 行动：**
-        *   实现 `start_command`, `help_command`, `search_command`。
-        *   `search_command` 应调用 `MeilisearchService.search()` 和 `MessageFormatters.format_search_results()`。
-        *   实现白名单管理命令 (管理员权限，初期可简单实现)。
+        *   使用 Telethon 的事件处理器 (如 `@client.on(events.NewMessage(pattern='/start'))` 或使用 `add_event_handler`) 来处理 `/start`, `/help`, `/search` 等命令。
+        *   `/search` 命令的处理逻辑应调用 `MeilisearchService.search()` 并使用 `message_formatters.format_search_results()` 格式化结果。
+        *   白名单管理命令也应通过 Telethon 事件处理。
         *   记录到 `memory-bank/activeContext.md`。
 10. **任务：** `search_bot/callback_query_handlers.py` 开发。
     *   **AI 行动：**
-        *   处理搜索结果分页回调。
+        *   使用 Telethon 的 `events.CallbackQuery` 事件处理器来处理 Inline Button 的回调，例如用于搜索结果的分页。
         *   记录到 `memory-bank/activeContext.md`。
 11. **任务：** `search_bot/bot.py` 开发。
     *   **AI 行动：**
-        *   初始化 `Application` (python-telegram-bot)。
-        *   注册命令和回调处理器。
+        *   初始化 `TelegramClient` (Telethon) 并使用 Bot Token 进行认证 (与 Userbot 的 `TelegramClient` 实例分开，或者根据设计决策共用但需清晰区分)。
+        *   注册通过 `command_handlers.py` 和 `callback_query_handlers.py` 中定义的事件处理器。
+        *   启动客户端 (例如 `client.run_until_disconnected()`)。
         *   记录到 `memory-bank/activeContext.md`。
 12. **任务：** `main.py` (后端主入口) 开发。
     *   **AI 行动：**
-        *   实现启动 Userbot 和 Search Bot 的逻辑。
-        *   确保可以从命令行运行。
+        *   实现启动 Userbot (Telethon, 使用用户凭据) 和 Search Bot (Telethon, 使用 Bot Token) 的逻辑。这可能涉及异步运行两个独立的 Telethon客户端。
+        *   确保可以从命令行运行，并能正确管理两个客户端的生命周期。
         *   记录到 `memory-bank/activeContext.md`。
 13. **任务：** 后端 MVP 集成测试与调试。
     *   **AI 行动：**
@@ -256,7 +258,7 @@
 *   **Telethon 登录：** Userbot 首次运行时需要交互式登录 Telegram。AI 需要能处理这种情况，或者指导用户如何预先生成 session 文件。对于全自动执行，AI 可能需要用户预先提供 `*.session` 文件或通过环境变量传入登录凭据（如果 Telethon 支持非交互式登录）。**这是一个关键点，AI 需要明确如何处理 Userbot 的授权。**
 *   **Telegram Bot Token：** 需要用户通过 BotFather 创建 Bot 并提供 Token。
 *   **Meilisearch 中文优化：** 确保在 `ensure_index_setup` 时，考虑到中文分词和搜索的特性，可能需要查阅 Meilisearch 关于中文支持的最新文档进行配置。
-*   **异步处理：** Python 后端（Telethon, python-telegram-bot, FastAPI）大量使用异步编程，AI 需熟练运用 `async/await`。
+*   **异步处理：** Python 后端（Telethon, FastAPI）大量使用异步编程，AI 需熟练运用 `async/await`。
 
 ## 4. AI 执行流程的启动
 

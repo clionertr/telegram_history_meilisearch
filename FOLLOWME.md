@@ -78,11 +78,13 @@
 
 *   **语言:** Python (已选定)
 *   **核心库:**
-    *   **Telethon:** 与 Telegram User API 交互。
+    *   **Telethon:** 与 Telegram User API 和 Bot API 交互 (用于 Userbot 和 Search Bot)。
     *   **Meilisearch-Python:** Meilisearch 官方 Python客户端。
-    *   **python-telegram-bot:** (推荐) 主流的 Telegram Bot API 框架，异步支持良好。
     *   **FastAPI:** (推荐，用于API服务) 高性能，易于学习，自带数据校验和 OpenAPI 文档生成。如果只是 Bot，可以不单独引入 Web 框架，但若有 Mini App 则必须。
 *   **配置管理:** `python-dotenv` (管理 `.env` 文件), `Pydantic` (用于 FastAPI 和配置模型)。
+
+#### Python 版本管理
+项目推荐使用 `uv` 进行虚拟环境和包管理。Python 的版本约束通过项目根目录下的 [`pyproject.toml`](pyproject.toml:0) 文件中的 `[project.requires-python]` 字段进行定义 (例如, `requires-python = ">=3.9"`). `uv` 在创建虚拟环境时会遵循此设置。
 
 ### 2.3 数据库选择
 
