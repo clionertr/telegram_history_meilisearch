@@ -1,0 +1,6 @@
+Telethon
+meilisearch-python
+FastAPI
+python-dotenv
+Pydantic
+uvicorn
