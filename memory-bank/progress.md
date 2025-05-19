@@ -28,4 +28,21 @@
 *   **详细日志:** 完整的执行步骤、生成的配置文件内容和相关命令已记录在 [`memory-bank/activeContext.md`](memory-bank/activeContext.md:0) (版本：任务2 - 搭建本地开发环境)。
 
 ---
+
+### 任务 3: 更新文档与项目环境配置 (根据用户新指令) (已完成)
+*   **完成时间:** 2025/5/19 下午11:08 (大致时间，基于子任务报告)
+*   **执行者:** 💻 Code Mode
+*   **主要成果:**
+    *   **[`FOLLOWME.md`](FOLLOWME.md:0) 更新:**
+        *   明确 Search Bot 将改用 Telethon 实现。
+        *   补充了使用 `pyproject.toml` 的 `project.requires-python` 和 `uv` 进行 Python 版本管理的说明。
+    *   **[`memory-bank/PLAN.md`](memory-bank/PLAN.md:0) 更新:**
+        *   调整了环境准备阶段的依赖描述。
+        *   重构了后端开发阶段中 `search_bot` 相关模块的开发计划，以适应 Telethon 实现。
+        *   补充了关于 `pyproject.toml` 和 Python 版本管理的说明。
+    *   **[`requirements.txt`](requirements.txt:0) 确认:** 文件内容已符合新要求，无需修改 (未包含 `python-telegram-bot`)。
+    *   **[`pyproject.toml`](pyproject.toml:0) 更新:** `requires-python` 版本约束已修改为 `>=3.9`。
+*   **详细日志:** 完整的修改计划、步骤和思考过程已记录在 [`memory-bank/activeContext.md`](memory-bank/activeContext.md:0) (版本：任务3 - 文档与环境更新)。
+
+---
 *(后续任务进展将在此文件下方持续更新)*
