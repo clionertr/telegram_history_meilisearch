@@ -335,3 +335,19 @@
 *   **详细日志:** 详细的开发过程、组件实现、分页问题诊断与修复步骤已记录在 [`memory-bank/activeContext.md`](memory-bank/activeContext.md:0) (版本：阶段 2 - 任务 3 前端核心组件开发)。
 
 ---
+### 任务 2.4: 前端与 TMA SDK 集成 (已完成)
+*   **完成时间:** 2025/5/20 下午6:17 (用户确认时间)
+*   **执行者:** 💻 Code Mode
+*   **主要成果:**
+    *   创建了自定义 Hook [`frontend/src/hooks/useTelegramSDK.js`](frontend/src/hooks/useTelegramSDK.js:0) 来封装 TMA SDK (`@telegram-apps/sdk`) 的核心功能。
+    *   **功能实现:**
+        *   在应用启动时正确初始化 SDK。
+        *   获取并展示 Telegram 用户信息。
+        *   根据 Telegram 主题参数动态调整前端 UI 元素颜色，实现主题颜色适配。
+        *   在 [`frontend/src/pages/SearchPage.jsx`](frontend/src/pages/SearchPage.jsx:0) 中集成了 Telegram Mini App 的 `MainButton`，用于触发搜索操作，并根据状态动态更新其文本和可见性。
+        *   添加了触觉反馈 (`HapticFeedback`) 以增强用户体验。
+    *   **兼容性处理:** 对代码进行了重构，确保应用在非 Telegram 环境下（如普通浏览器）也能优雅降级并正常运行，避免了因 SDK 不可用导致的白屏或错误。
+    *   更新了相关组件 (`App.jsx`, `SearchPage.jsx`, `SearchBar.jsx`, `ResultsList.jsx`, `ResultItem.jsx`) 以使用新的 `useTelegramSDK` Hook，并应用了 SDK 功能。
+*   **详细日志:** 详细的实现步骤、代码片段、遇到的问题（如非TMA环境兼容性）及其解决方案已记录在 [`memory-bank/activeContext.md`](memory-bank/activeContext.md:0) (版本：阶段 2 - 任务 4 前端与 TMA SDK 集成)。
+
+---
