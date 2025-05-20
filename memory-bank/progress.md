@@ -233,3 +233,47 @@
         3.  **Meilisearch 主键推断问题:** 修改了索引创建逻辑，在 [`core/meilisearch_service.py`](core/meilisearch_service.py) 中为 Meilisearch 索引显式指定 `id` 作为主键，解决了因多个 `id` 后缀字段导致的主键推断失败问题。
         4.  **Telegram 消息链接生成问题:** 修复了 [`user_bot/utils.py`](user_bot/utils.py) 中 `generate_message_link` 函数生成链接时包含多余 "100" 前缀的问题。
 *   **详细日志:** 详细的分析、设计、实现、问题诊断和修复过程已记录在 [`memory-bank/activeContext.md`](memory-bank/activeContext.md) (版本：阶段1 - 任务 1.13 `user_bot/client.py` 集成与调试)。
+---
+
+### 任务 1.13: 后端 MVP 集成测试与调试 (已完成)
+*   **完成时间:** 2025/5/20 下午3:56 (用户确认时间)
+*   **执行者:** 💻 Code Mode
+*   **主要成果:**
+    *   全面测试了后端 MVP 的各项核心功能。
+    *   **UserBot 功能验证:** 成功测试了 UserBot 登录、历史消息同步 (同步了286条消息) 和实时消息监控。
+    *   **SearchBot 功能验证:** 成功测试了 SearchBot 登录、命令处理 (`/start`, `/help`, `/search`)、搜索结果分页 (每页5条) 和结果格式化 (消息内容、发送者、时间、链接)。
+    *   **关键问题修复:** 识别并修复了 `/search` 命令因 Meilisearch API 返回结构不一致（缺少 `'estimatedTotalHits'` 键）导致的失败问题。修改了 [`core/meilisearch_service.py`](core/meilisearch_service.py:0) 以标准化处理搜索结果，并增强了 [`search_bot/message_formatters.py`](search_bot/message_formatters.py:0) 的错误处理。
+    *   确认所有后端核心功能均按预期正常工作。
+*   **详细日志:** 详细的测试过程、问题诊断、修复方案和验证已记录在 [`memory-bank/activeContext.md`](memory-bank/activeContext.md:0) (版本：阶段1 - 任务 1.13 后端 MVP 集成测试与调试)。
+
+---
+### 任务 1.14: 用户确认后端 MVP (已完成)
+*   **完成时间:** 2025/5/20 下午4:00 (用户确认时间)
+*   **执行者:** 🧠 NexusCore
+*   **主要成果:**
+    *   通过 `ask_followup_question` 工具，向用户展示了后端 MVP 的完成情况。
+    *   用户确认后端 MVP 符合预期，并同意项目进入前端开发阶段。
+*   **详细记录:** 用户确认信息已记录在 NexusCore 的内部交互日志中。
+
+---
+## 阶段 2: 前端核心功能开发与测试 (针对 Mini App/Web 界面)
+
+### 任务 2.1: 前端项目初始化 (已完成)
+*   **完成时间:** 2025/5/20 下午4:08 (用户确认时间)
+*   **执行者:** 💻 Code Mode
+*   **主要成果:**
+    *   使用 Vite 在 `frontend/` 目录下成功初始化了 React 项目。
+    *   安装了核心依赖：React, ReactDOM, `@telegram-apps/sdk` (替代了已弃用的 `@tma.js/sdk`), Zustand (状态管理), Tailwind CSS (UI框架)。
+    *   配置了 ESLint 和 Prettier 以保证代码质量和风格一致性。
+    *   创建了 `frontend/.env.example` 和 `frontend/.env` 文件，并设置了基础环境变量如 `VITE_API_BASE_URL`。
+    *   初步优化了 `App.jsx` 组件，并集成了 Telegram Mini App SDK 的初始化逻辑。
+    *   更新了项目根目录的 `.gitignore` 文件，添加了 `frontend/node_modules/` 和 `frontend/dist/` 等前端项目的忽略规则。
+    *   开发服务器 (`npm run dev`) 测试成功，项目结构已为后续开发做好准备。
+*   **技术选型:**
+    *   **构建工具:** Vite (优于 Create React App，因其更快的开发体验和现代构建机制)。
+    *   **Telegram SDK:** `@telegram-apps/sdk` (官方推荐的最新版本)。
+    *   **状态管理:** Zustand (轻量级且 API 简洁)。
+    *   **UI 框架:** Tailwind CSS (原子化 CSS，便于快速开发)。
+*   **详细日志:** 详细的技术选型理由、执行步骤、命令、生成的配置文件内容、遇到的问题（如 `@tma.js/sdk` 弃用）及其解决方案已记录在 [`memory-bank/activeContext.md`](memory-bank/activeContext.md:0) (版本：阶段 2 - 任务 1 前端项目初始化)。
+
+---

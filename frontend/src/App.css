@@ -1,0 +1,30 @@
+/* 将大多数样式移到了Tailwind类中，这里只保留特殊样式 */
+
+@keyframes logo-spin {
+  from {
+    transform: rotate(0deg);
+  }
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+/* 为React logo添加慢速旋转动画 */
+.animate-spin-slow {
+  animation: logo-spin infinite 20s linear;
+}
+
+/* 只在用户没有设置减少动画的情况下应用动画 */
+@media (prefers-reduced-motion) {
+  .animate-spin-slow {
+    animation: none;
+  }
+}
+
+/* 确保根容器有适当的样式 */
+#root {
+  width: 100%;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
+}
