@@ -72,4 +72,16 @@
 *   **详细日志:** 完整的需求分析、实现思路、代码实现和测试过程已记录在 [`memory-bank/activeContext.md`](memory-bank/activeContext.md:0) (版本：阶段1 - `core/models.py` 开发)。
 
 ---
+
+### 任务 1.3: `core/meilisearch_service.py` 开发 (已完成)
+*   **完成时间:** 2025/5/20 下午1:07 (大致时间，基于子任务报告)
+*   **执行者:** 💻 Code Mode
+*   **主要成果:**
+    *   实现了 `MeiliSearchService` 类 ([`core/meilisearch_service.py`](core/meilisearch_service.py:0))，提供与 Meilisearch 服务的完整交互功能。
+    *   功能包括：客户端初始化、索引自动创建与配置 (searchable, filterable, sortable attributes, ranking rules)、单条及批量消息索引、强大的搜索功能 (关键词、过滤、排序、分页) 和消息删除。
+    *   额外实现了停用词 (`update_stop_words`) 和同义词 (`update_synonyms`) 的配置方法。
+    *   编写了全面的集成测试 ([`tests/integration/test_meilisearch_service.py`](tests/integration/test_meilisearch_service.py:0))，覆盖所有核心功能，并在本地 Docker 环境下成功运行。
+*   **详细日志:** 详细的设计、实现、问题解决和测试过程已记录在 [`memory-bank/activeContext.md`](memory-bank/activeContext.md:0) (版本：阶段1 - `core/meilisearch_service.py` 开发)。
+
+---
 *(后续任务进展将在此文件下方持续更新)*
