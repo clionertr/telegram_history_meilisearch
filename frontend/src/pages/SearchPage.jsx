@@ -29,15 +29,20 @@ function SearchPage() {
 
   // 管理MainButton状态和事件
   useEffect(() => {
+    // 只在TMA环境中处理MainButton
     if (!isInitialized || !isAvailable) return;
     
-    // 根据查询词状态设置主按钮文本和可见性
-    if (query.trim()) {
-      setMainButtonText(isLoading ? '搜索中...' : '开始搜索');
-      showMainButton();
-    } else {
-      setMainButtonText('请输入关键词');
-      hideMainButton();
+    try {
+      // 根据查询词状态设置主按钮文本和可见性
+      if (query.trim()) {
+        setMainButtonText(isLoading ? '搜索中...' : '开始搜索');
+        showMainButton();
+      } else {
+        setMainButtonText('请输入关键词');
+        hideMainButton();
+      }
+    } catch (error) {
+      console.error('更新MainButton状态失败:', error);
     }
   }, [
     isInitialized,
@@ -51,17 +56,28 @@ function SearchPage() {
 
   // 设置MainButton点击事件
   useEffect(() => {
+    // 只在TMA环境中设置点击事件
     if (!isInitialized || !isAvailable) return;
     
-    const handleMainButtonClick = () => {
-      if (query.trim() && !isLoading) {
-        fetchResults();
-        triggerHapticFeedback('impact'); // 触发触觉反馈
-      }
-    };
-    
-    // 设置点击处理程序并返回清理函数
-    return setMainButtonClickHandler(handleMainButtonClick);
+    try {
+      const handleMainButtonClick = () => {
+        if (query.trim() && !isLoading) {
+          fetchResults();
+          // 尝试触发触觉反馈
+          try {
+            triggerHapticFeedback('impact');
+          } catch (hapticError) {
+            console.warn('触发触觉反馈失败，但继续执行:', hapticError);
+          }
+        }
+      };
+      
+      // 设置点击处理程序并返回清理函数
+      return setMainButtonClickHandler(handleMainButtonClick);
+    } catch (error) {
+      console.error('设置MainButton点击事件失败:', error);
+      return () => {}; // 返回空函数作为清理函数
+    }
   }, [
     isInitialized,
     isAvailable,
