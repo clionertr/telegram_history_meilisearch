@@ -59,7 +59,42 @@ class MeiliSearchService:
         """
         # 获取所有索引
         indexes = self.client.get_indexes()
-        index_names = [index.uid for index in indexes.results]
+        
+        # 兼容不同版本 Meilisearch API 的返回结构
+        # 如果 indexes 是字典（新版 API），则尝试从不同的可能键中获取索引列表
+        # 如果 indexes 有 .results 属性（旧版 API），则使用该属性
+        if hasattr(indexes, 'results'):
+            # 旧版 API 结构
+            index_list = indexes.results
+            index_names = [index.uid for index in index_list]
+        else:
+            # 新版 API 结构 - indexes 是字典
+            self.logger.debug(f"Meilisearch get_indexes 返回的是字典: {indexes}")
+            
+            # 尝试获取索引列表 - 可能存在于不同的键下或直接是列表
+            if isinstance(indexes, list):
+                index_list = indexes
+            elif isinstance(indexes, dict):
+                # 尝试常见的键名
+                if 'results' in indexes:
+                    index_list = indexes['results']
+                elif 'items' in indexes:
+                    index_list = indexes['items']
+                else:
+                    # 如果没有找到预期的键，可能索引列表直接就是字典值
+                    self.logger.warning("无法确定 Meilisearch 索引列表位置，尝试使用整个返回值")
+                    index_list = indexes
+            else:
+                self.logger.warning(f"Meilisearch get_indexes 返回了未知类型: {type(indexes)}")
+                index_list = []
+            
+            # 从索引列表中提取 uid - 处理可能每个索引是对象或字典的情况
+            index_names = []
+            for index_item in index_list:
+                if hasattr(index_item, 'uid'):
+                    index_names.append(index_item.uid)
+                elif isinstance(index_item, dict) and 'uid' in index_item:
+                    index_names.append(index_item['uid'])
         
         # 检查是否需要创建索引
         if self.index_name not in index_names:
