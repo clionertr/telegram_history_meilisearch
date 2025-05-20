@@ -38,12 +38,18 @@ def format_search_results(
             - 格式化后的消息文本
             - 分页按钮列表（如果有分页）或 None（如果没有分页）
     """
-    if not results or 'hits' not in results or not results['hits']:
+    # 验证结果数据的完整性
+    if not results:
+        return "😕 未找到匹配的消息。搜索结果为空。", None
+    
+    # 确保 hits 字段存在且不为空
+    hits = results.get('hits', [])
+    if not hits:
         return "😕 未找到匹配的消息。请尝试其他关键词或检查搜索语法。", None
     
-    # 提取基本搜索信息
-    query = results.get('query', '')
-    total_hits = results.get('estimatedTotalHits', 0)
+    # 提取基本搜索信息，使用安全的 get 方法并提供默认值
+    query = results.get('query', '未知查询')
+    total_hits = results.get('estimatedTotalHits', len(hits))
     processing_time = results.get('processingTimeMs', 0)
     
     # 构建消息头部

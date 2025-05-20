@@ -249,10 +249,53 @@ class MeiliSearchService:
         self.logger.debug(f"执行搜索: 关键词='{query}', 参数={search_params}")
         results = self.index.search(query, search_params)
         
-        self.logger.info(f"搜索 '{query}' 找到 {results['estimatedTotalHits']} 条结果，"
-                        f"处理时间: {results['processingTimeMs']}ms")
+        # 处理不同版本 Meilisearch API 的返回结构
+        # 确保结果包含必要的键，兼容新旧版 API
+        # 标准化为字典格式
+        if not isinstance(results, dict):
+            # 如果返回的不是字典，尝试转换为字典
+            # 可能是 SearchResponse 对象等
+            self.logger.debug(f"搜索结果不是字典，类型: {type(results)}")
+            if hasattr(results, '__dict__'):
+                results_dict = dict(results.__dict__)
+            else:
+                # 尝试获取常见属性
+                results_dict = {}
+                for attr in ['hits', 'estimatedTotalHits', 'processingTimeMs', 'query']:
+                    if hasattr(results, attr):
+                        results_dict[attr] = getattr(results, attr)
+        else:
+            results_dict = results
         
-        return results
+        # 确保结果包含所有必要的键
+        if 'hits' not in results_dict:
+            results_dict['hits'] = []
+        if 'estimatedTotalHits' not in results_dict:
+            # 尝试从不同可能的属性名获取
+            if hasattr(results, 'estimated_total_hits'):
+                results_dict['estimatedTotalHits'] = results.estimated_total_hits
+            elif hasattr(results, 'nb_hits'):
+                results_dict['estimatedTotalHits'] = results.nb_hits
+            else:
+                results_dict['estimatedTotalHits'] = len(results_dict['hits'])
+        
+        if 'processingTimeMs' not in results_dict:
+            # 尝试从不同可能的属性名获取
+            if hasattr(results, 'processing_time_ms'):
+                results_dict['processingTimeMs'] = results.processing_time_ms
+            else:
+                results_dict['processingTimeMs'] = 0
+        
+        if 'query' not in results_dict:
+            results_dict['query'] = query
+        
+        # 记录搜索结果信息
+        self.logger.info(
+            f"搜索 '{query}' 找到 {results_dict['estimatedTotalHits']} 条结果，"
+            f"处理时间: {results_dict['processingTimeMs']}ms"
+        )
+        
+        return results_dict
     
     def delete_message(self, document_id: str) -> dict:
         """
