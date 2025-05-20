@@ -3,7 +3,7 @@
  */
 
 // API基础URL，可以从环境变量获取
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || (import.meta.env.PROD ? 'http://localhost:8000' : '');
 
 /**
  * 搜索API - 调用后端/api/v1/search端点
