@@ -96,4 +96,18 @@
 *   **详细日志:** 详细的设计思路、实现步骤、首次登录处理、待考虑问题及单元测试策略已记录在 [`memory-bank/activeContext.md`](memory-bank/activeContext.md:0) (版本：阶段1 - `user_bot/client.py` 开发)。
 
 ---
+
+### 任务 1.5: `user_bot/event_handlers.py` 和 `user_bot/utils.py` 开发 (已完成)
+*   **完成时间:** 2025/5/20 下午1:24 (大致时间，基于子任务报告)
+*   **执行者:** 💻 Code Mode
+*   **主要成果:**
+    *   在 [`user_bot/utils.py`](user_bot/utils.py:0) 中实现了 `generate_message_link`, `format_sender_name`, `determine_chat_type` 等辅助函数。
+    *   在 [`user_bot/event_handlers.py`](user_bot/event_handlers.py:0) 中实现了 `handle_new_message` 和 `handle_message_edited` 事件处理函数。
+    *   实现了服务获取（ConfigManager, MeiliSearchService）的单例模式访问。
+    *   事件处理逻辑包括：白名单检查、从 Telethon 事件中准确提取消息数据、将消息转换为 `MeiliMessageDoc` 模型、通过 `MeiliSearchService` 索引消息到 Meilisearch。
+    *   包含了全面的错误处理和日志记录。
+    *   在代码注释中说明了事件处理器如何注册到 Telethon 客户端。
+*   **详细日志:** 详细的设计思路、实现步骤、关键决策、字段提取逻辑和错误处理已记录在 [`memory-bank/activeContext.md`](memory-bank/activeContext.md:0) (版本：阶段1 - `user_bot/event_handlers.py` 开发)。
+
+---
 *(后续任务进展将在此文件下方持续更新)*
