@@ -1,278 +1,156 @@
 # NexusCore Orchestration Log
 
-## Task: 阶段 2, 任务 3: 前端核心组件开发
-
-**Objective:** 根据项目计划 [`memory-bank/PLAN.md`](memory-bank/PLAN.md:150) (阶段 2, 任务 3)，开发前端核心 UI 组件，包括搜索服务、搜索栏、结果列表、结果项、主搜索页面，并使用 Zustand 进行状态管理。
-
-**Orchestrator (NexusCore) Notes:**
-*   Delegating this task to "Code" mode.
-*   Provided "Code" mode with context from:
-    *   User's request.
-    *   [`memory-bank/PLAN.md`](memory-bank/PLAN.md:0) (specifically lines 150-159 for this task).
-    *   [`api/README.md`](api/README.md:0) (for API endpoint details).
-    *   [`FOLLOWME.md`](FOLLOWME.md:0) (for overall project requirements).
-*   Instructed "Code" mode to log its detailed process in this file (`memory-bank/activeContext.md`).
+(Previous content has been archived or integrated into other Memory Bank files like progress.md and decisionLog.md by NexusCore.)
 
 ---
 
-# Code Mode - Detailed Work Log (Task: 前端核心组件开发)
+# 前端与 TMA SDK 集成 (阶段 2, 任务 4) - 工作日志
+
+## 1. 初始状态分析
+
+首先分析了项目当前状态，发现：
+
+- 前端项目已使用React构建，并使用Zustand进行状态管理
+- `package.json`中已经安装了`@telegram-apps/sdk`包（v3.9.2），但代码中仍使用`window.Telegram.WebApp`方式访问SDK
+- 已有基本的TMA SDK集成，但不完善：
+  - `App.jsx`中有初始化代码和用户信息获取
+  - `SearchPage.jsx`中有基本的MainButton功能实现
+  - `SearchBar.jsx`已考虑在Telegram环境中隐藏传统搜索按钮
+  - 没有使用主题颜色适配
+  - 没有触觉反馈功能
+
+## 2. 代码组织与改进方案
+
+确定了以下改进方案：
+
+1. 创建封装TMA SDK功能的自定义Hook，使代码更清晰、可维护
+2. 将全部代码从`window.Telegram.WebApp`更新为`@telegram-apps/sdk`库
+3. 增强用户信息获取与展示功能
+4. 实现主题颜色适配，动态同步UI元素与Telegram主题
+5. 完善MainButton集成，特别是在SearchPage中
+6. 添加触觉反馈功能
+
+## 3. 实现过程
+
+### 3.1 创建TMA SDK封装钩子
+
+创建了`useTelegramSDK.js`钩子文件，封装TMA SDK核心功能：
+
+```javascript
+// frontend/src/hooks/useTelegramSDK.js
+import { useEffect, useState, useCallback } from 'react';
+import WebApp from '@telegram-apps/sdk';
+
+export const useTelegramSDK = () => {
+  // 初始化与状态管理
+  const [isInitialized, setIsInitialized] = useState(false);
+  const [userInfo, setUserInfo] = useState(null);
+  const [themeParams, setThemeParams] = useState(null);
+  
+  // 初始化TMA SDK
+  useEffect(() => {
+    // SDK初始化，用户信息和主题参数获取
+  }, []);
+  
+  // 封装MainButton操作函数
+  const setMainButtonText = useCallback((text) => { /* ... */ }, [isInitialized]);
+  const showMainButton = useCallback((text) => { /* ... */ }, [isInitialized]);
+  const hideMainButton = useCallback(() => { /* ... */ }, [isInitialized]);
+  const setMainButtonClickHandler = useCallback((callback) => { /* ... */ }, [isInitialized]);
+  
+  // 触觉反馈
+  const triggerHapticFeedback = useCallback((style = 'impact') => { /* ... */ }, [isInitialized]);
+  
+  // 主题应用函数
+  const applyThemeToElement = useCallback((element, options = {}) => { /* ... */ }, [isInitialized, themeParams]);
+  const getThemeCssVars = useCallback(() => { /* ... */ }, [themeParams]);
+  
+  return {
+    isInitialized,
+    isAvailable: !!WebApp.initData,
+    userInfo,
+    themeParams,
+    // 其他方法与属性...
+  };
+};
+
+export default useTelegramSDK;
+```
+
+这个钩子提供了完整的TMA SDK功能访问，包括：
+- 检测Telegram环境与初始化
+- 获取和管理用户信息
+- 获取主题参数
+- 控制MainButton
+- 触发不同类型的触觉反馈
+- 将Telegram主题应用到DOM元素或获取CSS变量
+
+### 3.2 更新App.jsx
+
+更新了`App.jsx`以使用新钩子，主要改进：
+
+- 使用`useTelegramSDK`钩子代替直接调用`window.Telegram.WebApp`
+- 使用`getThemeCssVars`将主题颜色应用到整个应用的根元素
+- 动态设置应用背景色和文本色
+- 使用Telegram主题颜色美化用户信息展示区域
+
+### 3.3 更新SearchPage.jsx
+
+大幅强化了`SearchPage.jsx`的TMA SDK集成：
+
+- 使用钩子管理MainButton状态和事件
+- 动态调整标题和子标题颜色，适配Telegram主题
+- 根据搜索状态智能更新MainButton文本
+- 在搜索时添加触觉反馈
+- 使用Telegram主题颜色创建渐变标题效果
+
+### 3.4 更新SearchBar.jsx
 
-(Code mode will start logging its work below this line)
+增强了`SearchBar.jsx`的主题适配和用户体验：
 
-## 工作计划
-
-根据项目计划阶段2，任务3的要求，我将完成以下工作：
-
-1. 开发前端API服务 (`frontend/src/services/api.js`)
-2. 创建Zustand状态管理 (`frontend/src/store/searchStore.js`)
-3. 开发React核心组件：
-   - SearchBar.jsx
-   - ResultItem.jsx
-   - ResultsList.jsx
-   - SearchPage.jsx
-4. 更新App.jsx以集成SearchPage
+- 根据Telegram主题自动调整输入框边框、背景和文本颜色
+- 根据输入状态提供更智能的提示文字
+- 为非Telegram环境中的搜索按钮添加主题颜色
+- 添加触觉反馈
 
-## 1. 创建API服务
+### 3.5 更新ResultsList.jsx和ResultItem.jsx
 
-开始实现`frontend/src/services/api.js`文件，用于封装与后端API的通信。
+完善了搜索结果展示组件的主题适配：
 
-已创建`frontend/src/services/api.js`文件，该文件封装了调用后端`/api/v1/search`端点的函数：
-- 实现了`searchMessages`函数，接收搜索关键词、过滤条件、页码和每页结果数量
-- 处理了API请求成功和失败的情况
-- 使用环境变量`VITE_API_BASE_URL`获取API基础URL，默认为`http://localhost:8000`
-
-## 2. 创建Zustand状态管理
-
-开始实现`frontend/src/store/searchStore.js`文件，用于状态管理。
-
-已创建`frontend/src/store/searchStore.js`文件，使用Zustand管理搜索相关的状态：
-- 基础状态：`query`(搜索关键词)、`results`(搜索结果)、`isLoading`(加载状态)、`error`(错误信息)
-- 分页信息：`pagination` 对象，包含当前页码、总页数、总结果数、每页结果数
-- 筛选条件：`filters` 对象，包含聊天类型、开始日期、结束日期
-- 状态更新Action：
-  - `setQuery`：设置搜索关键词
-  - `setFilters`：设置筛选条件
-  - `setPage`：设置当前页码
-  - `setHitsPerPage`：设置每页结果数
-  - `clearResults`：清空搜索结果
-  - `fetchResults`：执行搜索，调用API服务的`searchMessages`函数
+- 为标题、分页按钮、加载状态和错误信息应用主题颜色
+- 增加分页操作和链接点击的触觉反馈
+- 使用Telegram主题颜色美化结果卡片的各个部分
 
-## 3. 开发React组件
+## 4. 遇到的问题与解决方案
 
-### 3.1 创建SearchBar组件
+1. **问题**: WebApp对象的API差异
+   **解决方案**: 通过查阅`@telegram-apps/sdk`文档，确保使用正确的API方法名和参数
 
-开始实现`frontend/src/components/SearchBar.jsx`组件，用于搜索输入框和提交按钮。
+2. **问题**: 在不同组件中保持主题颜色一致性
+   **解决方案**: 创建`getThemeCssVars`函数，将主题参数转换为CSS变量，应用到根元素
 
-已创建`frontend/src/components/SearchBar.jsx`组件：
-- 使用Zustand store中的query状态，并能通过setQuery更新
-- 表单提交时触发fetchResults方法执行搜索
-- 根据Telegram环境的不同提供不同的UI体验：
-  - 在普通网页环境中显示搜索按钮
-  - 在Telegram Mini App环境中，提示用户使用Telegram的MainButton
+3. **问题**: 触觉反馈功能可能不是所有设备都支持
+   **解决方案**: 添加检查确保只在支持的环境中触发，避免因触觉反馈API不存在导致错误
 
-### 3.2 创建ResultItem组件
+## 5. 最终成果
 
-开始实现`frontend/src/components/ResultItem.jsx`组件，用于展示单条搜索结果。
-
-已创建`frontend/src/components/ResultItem.jsx`组件：
-- 展示单条搜索结果的详细信息：
-  - 聊天标题
-  - 发送者名称
-  - 发送时间（格式化的日期）
-  - 消息内容摘要
-  - 原始消息链接（可点击）
-- 使用Tailwind CSS进行样式设计，支持亮色/暗色模式
-
-### 3.3 创建ResultsList组件
-
-开始实现`frontend/src/components/ResultsList.jsx`组件，用于展示搜索结果列表。
-
-已创建`frontend/src/components/ResultsList.jsx`组件：
-- 使用Zustand store中的results状态显示搜索结果
-- 使用ResultItem组件渲染每条搜索结果
-- 根据不同状态显示不同内容：
-  - 加载中：显示加载动画
-  - 错误：显示错误信息
-  - 无结果：显示无结果提示
-  - 有结果：显示结果列表并展示分页信息
-- 实现分页功能：
-  - 显示当前页/总页数
-  - 提供"上一页"、"下一页"按钮
-  - 点击分页按钮时更新页码并重新获取数据
-
-### 3.4 创建SearchPage组件
-
-开始实现`frontend/src/pages/SearchPage.jsx`组件，作为主要的搜索界面，组合SearchBar和ResultsList。
-
-已创建`frontend/src/pages/SearchPage.jsx`组件：
-- 组合了SearchBar和ResultsList组件
-- 管理Telegram Mini App的MainButton:
-  - 根据查询状态显示/隐藏MainButton
-  - 设置MainButton的点击事件来触发搜索
-  - 在组件卸载时清理事件监听器
-- 提供了简洁的页面标题和说明
-
-### 3.5 更新App.jsx
-
-开始更新`frontend/src/App.jsx`文件，将SearchPage作为主要展示页面。
-
-已更新`frontend/src/App.jsx`文件：
-- 移除了原始的测试内容和示例代码
-- 保留并优化了Telegram Mini App SDK初始化逻辑
-- 导入并使用SearchPage组件作为主要展示页面
-- 添加了展开视图的功能，以便在Telegram客户端中获得更好的显示效果
-- 保留了用户信息显示，但采用了更简洁的样式
-
-## 4. 任务完成总结
-
-前端核心UI组件开发任务已全部完成，包括：
-
-1. **API服务**:
-   - 创建了`frontend/src/services/api.js`，封装了与后端`/api/v1/search`端点通信的函数
-   - 处理了请求和响应格式，包括错误处理
-
-2. **Zustand状态管理**:
-   - 创建了`frontend/src/store/searchStore.js`，管理搜索相关状态
-   - 实现了所需的状态和actions：query、results、isLoading、error、pagination、filters等
-   - 提供了易用的API：setQuery、setFilters、setPage、fetchResults、clearResults等
-
-3. **React组件**:
-   - `SearchBar.jsx`: 搜索输入框和提交按钮，与Zustand store同步
-   - `ResultItem.jsx`: 展示单条搜索结果，包括消息摘要、发送者、聊天标题、发送时间及原始消息链接
-   - `ResultsList.jsx`: 展示搜索结果列表，处理不同状态（加载中、无结果、错误）和分页逻辑
-   - `SearchPage.jsx`: 组合SearchBar和ResultsList，管理Telegram Mini App的MainButton
-   - 更新了`App.jsx`以集成SearchPage和Telegram Mini App SDK
-
-所有组件均使用了Tailwind CSS进行样式设计，并提供了良好的亮色/暗色模式支持。用户界面简洁直观，易于使用。
-
-项目现在具备了搜索Telegram历史消息的完整功能，用户可以：
-- 输入关键词进行搜索
-- 查看搜索结果列表
-- 分页浏览更多结果
-- 点击链接查看原始消息
-
-接下来可以进行实际测试和后续优化工作。
-
-## 5. 用户反馈与优化
-
-根据用户反馈，发现分页功能存在以下问题：
-
-1. **API限制问题**:
-   - 用户提供的API响应显示，`estimatedTotalHits`正好等于10，与返回的结果数量相同
-   - 这可能表明后端API限制了最多返回10条结果，导致前端计算出`totalPages = 1`
-   - 当只有一页时，分页控件默认不显示，给用户造成了没有分页功能的错觉
+成功将前端与TMA SDK集成，实现了所有要求的功能：
 
-2. **解决方案**:
-   - 修改`searchStore.js`中的默认`hitsPerPage`从10改为5，这样当API返回10条结果时会有2页
-   - 更新`ResultsList.jsx`中的分页逻辑，当检测到可能的API限制（totalHits等于hitsPerPage）时，即使只有一页也显示分页控件
-   - 这些修改为临时解决方案，更好的方法是修改后端API，使其能够返回正确的估计总结果数
+- ✅ 在应用中初始化并使用`@telegram-apps/sdk`库
+- ✅ 获取并展示Telegram用户信息
+- ✅ 根据Telegram主题动态调整UI元素颜色
+- ✅ 通过MainButton触发搜索操作
+- ✅ 完善的MainButton状态管理和文本动态更新
+- ✅ 添加触觉反馈，增强用户体验
+- ✅ 代码组织清晰，将SDK功能封装在自定义Hook中
 
-3. **已实施的优化**:
-   ```js
-   // 将每页结果数改为5（便于测试分页）
-   pagination: {
-     currentPage: 1,
-     totalPages: 0,
-     totalHits: 0,
-     hitsPerPage: 5,
-   }
-   ```
-
-   ```js
-   // 增强的分页逻辑，处理API限制情况
-   const renderPagination = () => {
-     // 当估计总结果数正好等于每页显示数量时，可能是API限制了返回的结果数
-     const apiLimitedResults = totalHits > 0 && totalHits === hitsPerPage;
-     
-     if (totalPages <= 1 && !apiLimitedResults) return null;
-     // ... 分页控件渲染
-   }
-   ```
-
-通过这些修改，现在即使在API可能限制结果数的情况下，用户也能看到并使用分页功能。
-
-## 6. 最新用户反馈与分析 (中断后)
-
-用户最新反馈：“现在的情况是只有1页，一页5个结果”。
-
-**分析:**
-*   前端已将 `hitsPerPage` 正确设置为5。
-*   此现象强烈暗示后端API针对当前用户的搜索条件，返回的 `estimatedTotalHits` 就是5（或小于等于5）。
-*   因此，前端计算 `totalPages = Math.ceil(estimatedTotalHits / 5)` 结果为1。
-*   即使 `ResultsList.jsx` 中有特殊逻辑处理 `totalHits === hitsPerPage` 的情况，但如果 `totalPages` 最终为1，分页控件（如“上一页”/“下一页”）自然不会显示或无实际翻页功能。
-
-**结论:**
-前端分页逻辑本身是存在的并且在尝试适应API的行为。当前分页表现的根本原因很可能在于后端API返回的 `estimatedTotalHits` 值未能反映出超出当前页的更多潜在结果。这可能是后端API本身的逻辑限制，或者是其依赖的搜索引擎（Meilisearch）针对该查询确实只估算到这么多结果。
-
-**建议行动:**
-1.  向用户澄清上述分析。
-2.  建议用户检查后端API (`api/routers/search.py`) 调用Meilisearch服务时，Meilisearch本身返回的 `estimatedTotalHits` 是多少。
-3.  如果Meilisearch返回的 `estimatedTotalHits` 远大于当前API响应中的值，则问题在后端API的逻辑。
-4.  如果Meilisearch返回的 `estimatedTotalHits` 与API响应一致（即较小的值），则问题可能在于Meilisearch的索引数据或其对当前查询的估算能力。
-
-
-鉴于此，前端层面能做的进一步调整有限，主要问题需要从后端或数据源层面排查。
-我将把这个分析和下一步的建议传递给代码模式，让它与用户沟通。
-
-## 7. 代码模式接手后端日志排查
-
-代码模式已收到上述分析，并主动在后端代码中添加了详细的日志记录，以便更精确地诊断分页问题。具体包括：
-
-*   **`core/meilisearch_service.py`**:
-    *   记录Meilisearch原始搜索结果。
-    *   记录详细的搜索指标（结果数量、限制、页码等）。
-*   **`api/routers/search.py`**:
-    *   记录请求的每页结果数与页码。
-    *   记录Meilisearch返回的 `estimatedTotalHits` 与实际 `hits` 数量的对比。
-    *   记录计算得到的 `totalPages` 值。
-
-**后续步骤将由代码模式主导：**
-1.  用户（或代码模式）重启后端服务以应用日志更改。
-2.  在前端进行搜索测试。
-3.  代码模式分析后端日志，特别是关注 `estimatedTotalHits` 的真实值以及Meilisearch的行为。
-4.  根据日志分析结果，代码模式将决定下一步的解决方案。
-
-NexusCore将等待代码模式的进一步反馈或完成信号。
-
-## 8. 后端日志分析与问题定位
-
-用户提供了详细的后端日志，关键发现如下：
-
-1.  **Meilisearch 原始响应正确**：
-    *   Meilisearch 内部的搜索结果 (`core.meilisearch_service` 日志中的 `Meilisearch 原始搜索结果`) 显示：
-        *   `'totalPages': 35`
-        *   `'totalHits': 173`
-    *   这表明 Meilisearch 正确估算出了总共有173条结果，分布在35页（每页5条）。
-
-2.  **`core.meilisearch_service.py` 处理错误**：
-    *   该服务在记录其处理结果时出现偏差：
-      `INFO - 搜索 '1' 找到 5 条结果，... 估计总结果数: 5`
-    *   它错误地将当前页返回的 `hits` 数量（5条）当作了 `估计总结果数`，而忽略了Meilisearch原始响应中的 `totalHits` (173)。
-
-3.  **`api.routers.search.py` 接收错误数据**：
-    *   API 路由从 `meilisearch_service.py` 接收到的 `estimatedTotalHits` 是错误的 `5`。
-    *   因此，API层最终向前端返回的 `estimatedTotalHits` 也是 `5`，导致前端计算出只有1页。
-
-**根本原因已定位：**
-问题不在前端或Meilisearch本身，而在于 [`core/meilisearch_service.py`](core/meilisearch_service.py:0) 在封装Meilisearch的搜索结果时，未能正确地提取和返回Meilisearch提供的真实 `totalHits` (或 `totalPages`)。它错误地使用了当前页的 `hits` 数量作为总数估算。
-
-**下一步行动：**
-需要指示代码模式修改 [`core/meilisearch_service.py`](core/meilisearch_service.py:0) 中的 `search()` 方法（或其调用的相关方法），确保它从Meilisearch的响应中正确提取 `totalHits` (或者 `totalPages` 和 `hitsPerPage` 用于计算 `totalHits`)，并将其传递给API层。
-
-## 9. 后端 `meilisearch_service.py` 修复完成
-
-代码模式报告已成功修复 [`core/meilisearch_service.py`](core/meilisearch_service.py:0) 中的 `search()` 方法。
-
-**修复详情：**
-原代码在无法直接找到 `estimatedTotalHits` 字段时，错误地回退到使用当前页返回的 `hits` 数量作为总命中数。
-新的实现会按以下优先级尝试获取真实的总命中数：
-1.  从 Meilisearch 客户端返回对象的 `estimated_total_hits` 或 `nb_hits` 属性。
-2.  从原始结果字典中的 `totalHits` 字段。
-3.  根据原始结果中的 `totalPages` 和 `hitsPerPage` 计算得出。
-4.  作为最后的备选方案，才使用当前页的 `hits` 数量。
-
-**预期效果：**
-此修复确保了 `meilisearch_service.py` 会向 `api/routers/search.py` 提供正确的 `estimatedTotalHits`。因此，前端应用现在应该能够接收到正确的总结果数（例如之前日志中显示的173条），并正确计算和显示分页（例如35页）。
-
-**后续：**
-代码模式现在应该会请求用户确认整个前端核心组件开发任务（包括分页功能的正确性）是否已完成。
+## 6. 后续建议
+
+1. 考虑添加更多用户设置，允许用户自定义应用外观
+2. 探索TMA SDK的其他功能，如后退按钮、云存储等
+3. 添加离线功能，在网络不佳时保存搜索结果
+4. 进一步优化UI在不同设备尺寸下的响应式设计
+
+---
+
+Ready for the next subtask.

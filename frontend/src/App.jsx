@@ -1,49 +1,58 @@
-import { useState, useEffect } from 'react';
+import { useEffect } from 'react';
 import SearchPage from './pages/SearchPage';
+import useTelegramSDK from './hooks/useTelegramSDK';
 import './App.css';
 
 /**
  * 应用主组件
  */
 function App() {
-  const [telegramUserInfo, setTelegramUserInfo] = useState(null);
+  // 使用自定义TMA SDK钩子
+  const {
+    isInitialized,
+    isAvailable,
+    userInfo,
+    themeParams,
+    getThemeCssVars
+  } = useTelegramSDK();
 
-  // 初始化Telegram Mini App SDK（如果在Telegram环境中运行）
+  // 将Telegram主题应用到整个应用
   useEffect(() => {
-    // 检查是否在Telegram Mini App环境中
-    const isTelegramMiniApp = window.Telegram?.WebApp;
-    
-    if (isTelegramMiniApp) {
-      try {
-        // 初始化Telegram Mini App SDK
-        const tg = window.Telegram.WebApp;
-        tg.ready();
-        
-        // 扩展视图（如果可能）
-        if (tg.expand) {
-          tg.expand();
-        }
-
-        // 获取用户信息
-        setTelegramUserInfo({
-          username: tg.initDataUnsafe?.user?.username || '未知用户',
-          firstName: tg.initDataUnsafe?.user?.first_name || '',
-          lastName: tg.initDataUnsafe?.user?.last_name || '',
-        });
-      } catch (error) {
-        console.error('Telegram Mini App SDK初始化失败:', error);
-      }
+    if (isInitialized && themeParams) {
+      // 获取CSS变量对象
+      const cssVars = getThemeCssVars();
+      
+      // 将CSS变量应用到根元素
+      const root = document.documentElement;
+      Object.entries(cssVars).forEach(([key, value]) => {
+        root.style.setProperty(key, value);
+      });
     }
-  }, []);
+  }, [isInitialized, themeParams, getThemeCssVars]);
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-gray-900 text-gray-900 dark:text-gray-100">
+    <div
+      className="min-h-screen text-gray-900 dark:text-gray-100"
+      style={isAvailable ? {
+        backgroundColor: 'var(--tg-theme-bg-color)',
+        color: 'var(--tg-theme-text-color)'
+      } : {
+        backgroundColor: 'rgb(243 244 246)',
+        color: 'rgb(17 24 39)'
+      }}
+    >
       {/* 用户信息显示区域 */}
-      {telegramUserInfo && (
-        <div className="bg-blue-50 dark:bg-blue-900/30 p-2 text-center">
+      {isAvailable && userInfo && (
+        <div
+          className="p-2 text-center"
+          style={{
+            backgroundColor: 'var(--tg-theme-secondary-bg-color, rgb(219 234 254))',
+            color: 'var(--tg-theme-text-color)',
+          }}
+        >
           <p className="text-sm">
-            欢迎，{telegramUserInfo.firstName} {telegramUserInfo.lastName}
-            {telegramUserInfo.username ? ` (@${telegramUserInfo.username})` : ''}
+            欢迎，{userInfo.firstName} {userInfo.lastName}
+            {userInfo.username ? ` (@${userInfo.username})` : ''}
           </p>
         </div>
       )}

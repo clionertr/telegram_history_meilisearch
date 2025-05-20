@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import useSearchStore from '../store/searchStore';
+import useTelegramSDK from '../hooks/useTelegramSDK';
 import ResultItem from './ResultItem';
 
 /**
@@ -8,14 +9,21 @@ import ResultItem from './ResultItem';
  */
 function ResultsList() {
   // 从store获取状态和actions
-  const { 
-    results, 
-    isLoading, 
-    error, 
-    pagination, 
+  const {
+    results,
+    isLoading,
+    error,
+    pagination,
     setPage,
     fetchResults
   } = useSearchStore();
+
+  // 使用TMA SDK钩子
+  const {
+    isAvailable,
+    themeParams,
+    triggerHapticFeedback
+  } = useTelegramSDK();
 
   // 解构分页信息
   const { currentPage, totalPages, totalHits, hitsPerPage } = pagination;
@@ -33,6 +41,9 @@ function ResultsList() {
       setPage(newPage);
       fetchResults(); // 使用store中已有的query和filters
       
+      // 触发触觉反馈
+      triggerHapticFeedback('selection');
+      
       // 滚动到顶部
       window.scrollTo({ top: 0, behavior: 'smooth' });
     }
@@ -44,8 +55,13 @@ function ResultsList() {
     if (isLoading && !results.length) return null; // 首次加载时不显示标题
     if (!results.length) return null; // 无结果时不显示标题
 
+    // 根据Telegram主题设置文本颜色
+    const textStyle = isAvailable && themeParams
+      ? { color: themeParams.hint_color }
+      : {};
+
     return (
-      <div className="mb-4 text-sm text-gray-600 dark:text-gray-400">
+      <div className="mb-4 text-sm" style={textStyle}>
         {totalHits > 0 ? (
           <p>
             共 {totalHits} 条结果，当前显示第 {startItem}-{endItem} 条
@@ -65,20 +81,31 @@ function ResultsList() {
     
     if (totalPages <= 1 && !apiLimitedResults) return null;
 
+    // 设置Telegram主题样式
+    const buttonStyle = isAvailable && themeParams ? {
+      border: `1px solid ${themeParams.hint_color}`,
+      color: themeParams.text_color
+    } : {};
+
+    const paginationTextStyle = isAvailable && themeParams ? {
+      color: themeParams.text_color
+    } : {};
+
     return (
       <div className="flex justify-center items-center mt-6 space-x-2">
         {/* 上一页按钮 */}
         <button
           onClick={() => handlePageChange(currentPage - 1)}
           disabled={currentPage === 1}
-          className="px-3 py-1 rounded border border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="px-3 py-1 rounded border disabled:opacity-50 disabled:cursor-not-allowed"
+          style={buttonStyle}
           aria-label="上一页"
         >
           ← 上一页
         </button>
 
         {/* 页码指示器 */}
-        <span className="px-3 py-1">
+        <span className="px-3 py-1" style={paginationTextStyle}>
           {currentPage} / {totalPages}
         </span>
 
@@ -86,7 +113,8 @@ function ResultsList() {
         <button
           onClick={() => handlePageChange(currentPage + 1)}
           disabled={currentPage === totalPages}
-          className="px-3 py-1 rounded border border-gray-300 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="px-3 py-1 rounded border disabled:opacity-50 disabled:cursor-not-allowed"
+          style={buttonStyle}
           aria-label="下一页"
         >
           下一页 →
@@ -94,6 +122,28 @@ function ResultsList() {
       </div>
     );
   };
+
+  // Telegram主题下的加载动画样式
+  const loadingSpinnerStyle = isAvailable && themeParams ? {
+    borderTopColor: themeParams.button_color,
+    borderBottomColor: themeParams.button_color
+  } : {
+    borderTopColor: 'rgb(59 130 246)',
+    borderBottomColor: 'rgb(59 130 246)'
+  };
+
+  // 错误消息样式
+  const errorStyle = isAvailable && themeParams ? {
+    backgroundColor: 'rgba(254, 226, 226, 0.5)',
+    borderColor: 'rgb(252, 165, 165)',
+    color: 'rgb(185, 28, 28)'
+  } : {};
+
+  // 无结果状态样式
+  const noResultsStyle = isAvailable && themeParams ? {
+    backgroundColor: themeParams.secondary_bg_color,
+    color: themeParams.hint_color
+  } : {};
 
   return (
     <div className="w-full">
@@ -103,13 +153,19 @@ function ResultsList() {
       {/* 加载状态 */}
       {isLoading && (
         <div className="flex justify-center my-8">
-          <div className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2 border-blue-500"></div>
+          <div
+            className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2"
+            style={loadingSpinnerStyle}
+          ></div>
         </div>
       )}
 
       {/* 错误状态 */}
       {error && !isLoading && (
-        <div className="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded mb-4">
+        <div
+          className="border px-4 py-3 rounded mb-4"
+          style={errorStyle}
+        >
           <p className="font-bold">搜索出错</p>
           <p>{error}</p>
         </div>
@@ -117,8 +173,11 @@ function ResultsList() {
 
       {/* 无结果状态 */}
       {!isLoading && !error && results.length === 0 && (
-        <div className="text-center py-12 bg-gray-50 dark:bg-gray-800 rounded-lg">
-          <p className="text-gray-600 dark:text-gray-400">
+        <div
+          className="text-center py-12 rounded-lg"
+          style={noResultsStyle}
+        >
+          <p>
             未找到匹配的结果，请尝试其他关键词
           </p>
         </div>
