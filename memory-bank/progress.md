@@ -163,4 +163,17 @@
 *   **详细日志:** 详细的需求分析、设计思路、高级搜索语法解析、遇到的问题与解决方案、代码实现细节、测试实现以及后续改进思路已记录在 [`memory-bank/activeContext.md`](memory-bank/activeContext.md:0) (版本：阶段1 - `search_bot/command_handlers.py` 开发)。
 
 ---
+
+### 任务 1.10: `search_bot/callback_query_handlers.py` 开发 (已完成)
+*   **完成时间:** 2025/5/20 下午2:02 (大致时间，基于子任务报告)
+*   **执行者:** 💻 Code Mode
+*   **主要成果:**
+    *   在 [`search_bot/callback_query_handlers.py`](search_bot/callback_query_handlers.py:0) 中实现了 `CallbackQueryHandlers` 类，用于处理由内联按钮（主要是分页按钮）触发的回调查询。
+    *   实现了分页回调逻辑：解析回调数据（页码和查询参数），重新执行 Meilisearch 搜索，并使用 `event.edit()` 更新原始消息以显示新页面的结果和更新后的分页按钮。
+    *   对查询参数可能被截断的情况进行了记录和基本处理。
+    *   包含了对无效回调数据和搜索执行错误的错误处理。
+    *   代码遵循 PEP 8，包含类型提示、详细文档字符串，并编写了相应的单元测试 ([`tests/unit/test_callback_query_handlers.py`](tests/unit/test_callback_query_handlers.py:0))。
+*   **详细日志:** 详细的需求分析、设计思路、实现细节、局限性与注意事项、测试策略以及单元测试的实现已记录在 [`memory-bank/activeContext.md`](memory-bank/activeContext.md:0) (版本：阶段1 - `search_bot/callback_query_handlers.py` 开发)。
+
+---
 *(后续任务进展将在此文件下方持续更新)*
