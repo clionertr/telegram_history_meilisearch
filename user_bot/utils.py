@@ -35,17 +35,27 @@ def generate_message_link(chat_id: int, message_id: int) -> str:
     # 获取绝对值，去掉可能的负号
     abs_chat_id = abs(chat_id)
     
+    # 修复链接生成 - 去掉开头的 "100"
+    # 如果 chat_id 是负数且以 100 开头(通常是频道/群组)，需要去掉 "100" 前缀
+    chat_id_str = str(abs_chat_id)
+    if chat_id < 0 and chat_id_str.startswith('100'):
+        # 去掉开头的 "100"
+        chat_id_for_link = chat_id_str[3:]
+        logger.debug(f"修正群组/频道ID: 从 {abs_chat_id} 到 {chat_id_for_link}")
+    else:
+        chat_id_for_link = str(abs_chat_id)
+    
     # 根据chat_id的符号判断聊天类型
     # 注意：这是基于一般规则的判断，可能存在例外情况
     if chat_id < 0:
         # 负数ID: 通常是超级群组或频道，使用c/路径格式
-        link = f"https://t.me/c/{abs_chat_id}/{message_id}"
+        link = f"https://t.me/c/{chat_id_for_link}/{message_id}"
         logger.debug(f"为群组/频道消息生成链接: chat_id={chat_id}, link={link}")
     else:
         # 正数ID: 通常是用户私聊
         # 私聊消息一般无法通过公共链接访问，除非是与机器人的对话
         # 我们也使用c/路径尝试生成链接，但这可能不适用于所有情况
-        link = f"https://t.me/c/{abs_chat_id}/{message_id}"
+        link = f"https://t.me/c/{chat_id_for_link}/{message_id}"
         logger.debug(f"为用户私聊消息生成链接: chat_id={chat_id}, link={link}")
         # 注意：如果已知username，理想的形式是 f"https://t.me/{username}/{message_id}"
     
