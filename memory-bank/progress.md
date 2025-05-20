@@ -29,6 +29,30 @@
 
 ---
 
+### 任务 3: 更新文档与项目环境配置 (根据用户新指令) (已完成)
+*   **完成时间:** 2025/5/19 下午11:08 (大致时间，基于子任务报告)
+*   **执行者:** 💻 Code Mode
+*   **主要成果:**
+    *   **[`FOLLOWME.md`](FOLLOWME.md:0) 更新:**
+        *   明确 Search Bot 将改用 Telethon 实现。
+        *   补充了使用 `pyproject.toml` 的 `project.requires-python` 和 `uv` 进行 Python 版本管理的说明。
+    *   **[`memory-bank/PLAN.md`](memory-bank/PLAN.md:0) 更新:**
+        *   调整了环境准备阶段的依赖描述。
+        *   重构了后端开发阶段中 `search_bot` 相关模块的开发计划，以适应 Telethon 实现。
+        *   补充了关于 `pyproject.toml` 和 Python 版本管理的说明。
+    *   **[`requirements.txt`](requirements.txt:0) 确认:** 文件内容已符合新要求，无需修改 (未包含 `python-telegram-bot`)。
+    *   **[`pyproject.toml`](pyproject.toml:0) 更新:** `requires-python` 版本约束已修改为 `>=3.9`。
+*   **详细日志:** 完整的修改计划、步骤和思考过程已记录在 [`memory-bank/activeContext.md`](memory-bank/activeContext.md:0) (版本：任务3 - 文档与环境更新)。
+
+---
+
+## 阶段 1: 后端核心功能开发与测试
+
+### 任务 1.1: `core/config_manager.py` 开发 (已完成)
+*   **完成时间:** 2025/5/20 上午0:02 (大致时间，基于子任务报告)
+*   **执行者:** 💻 Code Mode
+*   **主要成果:**
+    *   实现了 `ConfigManager` 类，用于加载 `.env` 文件和 `config.ini` 文件中的配置。
     *   提供了获取环境变量和配置项的方法，能优雅处理配置不存在的情况。
     *   实现了基于 JSON 文件 (`whitelist.json`) 的白名单管理功能 (读取、添加、移除)。
     *   实现了在首次加载时自动创建 `config.ini`, `whitelist.json` 及其对应的 `.example` 文件的逻辑。
@@ -177,6 +201,17 @@
     *   实现了健壮的异常处理和优雅关闭机制，能够响应 `KeyboardInterrupt` (Ctrl+C) 和系统信号 (如 SIGTERM)，确保两个 Telethon 客户端都能正确断开连接。
     *   代码结构清晰，考虑了跨平台兼容性。
 *   **详细日志:** 详细的设计方案、代码实现、优化迭代过程以及对优雅关闭机制的深入解释已记录在 [`memory-bank/activeContext.md`](memory-bank/activeContext.md) (版本：阶段1 - `main.py` 开发)。
+
+---
+### 调试任务: 修复 `core/meilisearch_service.py` AttributeError (已完成)
+*   **完成时间:** 2025/5/20 下午2:48 (大致时间，基于子任务报告)
+*   **执行者:** 💻 Code Mode
+*   **主要成果:**
+    *   成功修复了在 [`core/meilisearch_service.py`](core/meilisearch_service.py) 的 `ensure_index_setup` 方法中发生的 `AttributeError: 'dict' object has no attribute 'results'` 问题。
+    *   修复方案通过修改对 `self.client.get_indexes()` 返回结果的处理方式，使其能够兼容 Meilisearch Python 客户端不同版本可能返回的字典或带属性对象的数据结构。
+    *   增强了代码的健壮性，能够灵活处理索引列表和索引UID的提取。
+    *   添加了更详细的日志记录，以便于未来诊断类似问题。
+*   **详细日志:** 详细的问题分析、修复思路、代码实现和验证说明已记录在 [`memory-bank/activeContext.md`](memory-bank/activeContext.md) (版本：阶段1 - 调试 `core/meilisearch_service.py` AttributeError)。
 
 ---
 *(后续任务进展将在此文件下方持续更新)*

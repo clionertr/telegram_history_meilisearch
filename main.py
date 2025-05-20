@@ -110,7 +110,7 @@ async def async_main() -> None:
         # 创建并存储任务，使用create_task而不是直接使用gather
         # 这样我们可以在需要时单独取消任务
         user_bot_task = asyncio.create_task(
-            user_bot_client.start(),
+            user_bot_client.run(),  # 使用run方法替代start方法，以保持客户端运行
             name="UserBotTask"
         )
         search_bot_task = asyncio.create_task(

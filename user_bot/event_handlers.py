@@ -21,7 +21,7 @@ from user_bot.utils import generate_message_link, format_sender_name, determine_
 # 配置日志记录器
 logger = logging.getLogger(__name__)
 
-# 模块级别的服务实例
+# 模块级别的服务实例，用于向后兼容和单例模式访问
 _config_manager: Optional[ConfigManager] = None
 _meili_search_service: Optional[MeiliSearchService] = None
 
@@ -124,7 +124,8 @@ def extract_message_data(event) -> Dict[str, Any]:
     return message_data
 
 
-async def handle_new_message(event) -> None:
+async def handle_new_message(event, config_manager: Optional[ConfigManager] = None,
+                            meili_service: Optional[MeiliSearchService] = None) -> None:
     """
     处理新消息事件
     
@@ -135,13 +136,17 @@ async def handle_new_message(event) -> None:
     
     Args:
         event: Telethon 事件对象
+        config_manager: 可选的 ConfigManager 实例，如果未提供则使用单例
+        meili_service: 可选的 MeiliSearchService 实例，如果未提供则使用单例
     """
     try:
         # 提取 chat_id
         chat_id = event.chat_id
         
+        # 获取服务实例，优先使用传入的实例，否则使用单例
+        config_manager = config_manager or get_config_manager()
+        
         # 检查白名单
-        config_manager = get_config_manager()
         if not config_manager.is_in_whitelist(chat_id):
             logger.debug(f"忽略非白名单消息: chat_id={chat_id}")
             return
@@ -155,7 +160,7 @@ async def handle_new_message(event) -> None:
         message_doc = MeiliMessageDoc(**message_data)
         
         # 索引消息
-        meili_service = get_meili_search_service()
+        meili_service = meili_service or get_meili_search_service()
         result = meili_service.index_message(message_doc)
         
         logger.info(f"消息索引成功: id={message_doc.id}, task_id={result.get('taskUid', 'unknown')}")
@@ -164,7 +169,8 @@ async def handle_new_message(event) -> None:
         logger.error(f"处理新消息时发生错误: {str(e)}", exc_info=True)
 
 
-async def handle_message_edited(event) -> None:
+async def handle_message_edited(event, config_manager: Optional[ConfigManager] = None,
+                               meili_service: Optional[MeiliSearchService] = None) -> None:
     """
     处理消息编辑事件
     
@@ -175,13 +181,17 @@ async def handle_message_edited(event) -> None:
     
     Args:
         event: Telethon 事件对象
+        config_manager: 可选的 ConfigManager 实例，如果未提供则使用单例
+        meili_service: 可选的 MeiliSearchService 实例，如果未提供则使用单例
     """
     try:
         # 提取 chat_id
         chat_id = event.chat_id
         
+        # 获取服务实例，优先使用传入的实例，否则使用单例
+        config_manager = config_manager or get_config_manager()
+        
         # 检查白名单
-        config_manager = get_config_manager()
         if not config_manager.is_in_whitelist(chat_id):
             logger.debug(f"忽略非白名单消息编辑: chat_id={chat_id}")
             return
@@ -196,7 +206,7 @@ async def handle_message_edited(event) -> None:
         
         # 更新索引中的消息
         # 由于 Meilisearch 会自动替换同 ID 的文档，我们可以直接使用 index_message 方法
-        meili_service = get_meili_search_service()
+        meili_service = meili_service or get_meili_search_service()
         result = meili_service.index_message(message_doc)
         
         logger.info(f"消息更新成功: id={message_doc.id}, task_id={result.get('taskUid', 'unknown')}")

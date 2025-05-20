@@ -9,12 +9,16 @@ Userbot客户端模块
 
 import os
 import logging
+import functools
 from typing import Optional
 from pathlib import Path
-from telethon import TelegramClient
+from telethon import TelegramClient, events
 from telethon.errors import SessionPasswordNeededError
 
 from core.config_manager import ConfigManager
+from core.meilisearch_service import MeiliSearchService
+from user_bot.event_handlers import handle_new_message, handle_message_edited
+from user_bot.history_syncer import initial_sync_all_whitelisted_chats
 
 # 配置日志记录器
 logger = logging.getLogger(__name__)
@@ -65,6 +69,20 @@ class UserBotClient:
         self.config_manager = config_manager or ConfigManager()
         self.session_name = session_name
 
+        # 初始化MeiliSearchService
+        # 从配置获取MeiliSearch配置
+        host = self.config_manager.get_env("MEILISEARCH_HOST")
+        api_key = self.config_manager.get_env("MEILISEARCH_API_KEY")
+        
+        # 如果环境变量中没有配置，从配置文件获取
+        if not host:
+            host = self.config_manager.get_config("MeiliSearch", "HOST", "http://localhost:7700")
+        if not api_key:
+            api_key = self.config_manager.get_config("MeiliSearch", "API_KEY")
+            
+        self.meilisearch_service = MeiliSearchService(host=host, api_key=api_key)
+        logger.info("已初始化MeiliSearchService")
+
         # 构建会话文件路径（存储在.sessions目录下）
         session_path = os.path.join(SESSIONS_DIR, session_name)
 
@@ -112,6 +130,10 @@ class UserBotClient:
         如果是首次运行，用户需要通过控制台输入手机号和验证码进行交互式登录
         后续运行将使用保存的会话文件自动登录
 
+        登录成功后会：
+        1. 注册消息事件处理器（新消息和编辑消息）
+        2. 执行初始的历史消息同步（所有白名单聊天）
+
         Returns:
             TelegramClient: 已启动的Telethon客户端实例
         """
@@ -137,6 +159,47 @@ class UserBotClient:
             # 获取当前用户信息，验证登录成功
             me = await self._client.get_me()
             logger.info(f"登录成功! 用户: {me.first_name} (@{me.username})")
+            
+            # 注册事件处理器
+            # 使用functools.partial为事件处理器绑定额外参数（ConfigManager和MeiliSearchService实例）
+            new_message_handler = functools.partial(
+                handle_new_message,
+                config_manager=self.config_manager,
+                meili_service=self.meilisearch_service
+            )
+            
+            edited_message_handler = functools.partial(
+                handle_message_edited,
+                config_manager=self.config_manager,
+                meili_service=self.meilisearch_service
+            )
+            
+            # 注册事件处理器
+            self._client.add_event_handler(
+                new_message_handler,
+                events.NewMessage()
+            )
+            logger.info("已注册新消息事件处理器")
+            
+            self._client.add_event_handler(
+                edited_message_handler,
+                events.MessageEdited()
+            )
+            logger.info("已注册消息编辑事件处理器")
+            
+            # 执行初始历史同步
+            logger.info("开始执行初始历史消息同步...")
+            sync_results = await initial_sync_all_whitelisted_chats(
+                client=self._client,
+                config_manager=self.config_manager,
+                meilisearch_service=self.meilisearch_service
+            )
+            
+            # 记录同步结果
+            total_processed = sum(result[0] for result in sync_results.values())
+            total_indexed = sum(result[1] for result in sync_results.values())
+            logger.info(f"初始历史同步完成，共处理 {total_processed} 条消息，成功索引 {total_indexed} 条")
+            
             return self._client
             
         except SessionPasswordNeededError:
@@ -173,3 +236,23 @@ class UserBotClient:
         if self._client:
             logger.info("断开TelegramClient连接...")
             await self._client.disconnect()
+            
+    async def run(self) -> None:
+        """
+        运行客户端直到断开连接
+        
+        此方法在客户端启动后调用，会保持客户端运行直到断开连接
+        常用于确保事件处理器能够持续监听消息
+        """
+        if not self._client:
+            logger.error("客户端未初始化，请先初始化UserBotClient")
+            raise RuntimeError("客户端未初始化")
+            
+        # 如果客户端未启动，则先启动
+        if not self._client.is_connected():
+            await self.start()
+            
+        logger.info("UserBotClient 正在运行，等待事件...")
+        
+        # 运行直到断开连接
+        await self._client.run_until_disconnected()

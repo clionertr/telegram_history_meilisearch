@@ -383,15 +383,40 @@ async def sync_chat_history(chat_id: int, limit: Optional[int] = None, offset_da
     return await syncer.sync_chat_history(chat_id, limit, offset_date)
 
 
-async def initial_sync_all_whitelisted_chats(limit_per_chat: Optional[int] = None) -> Dict[int, Tuple[int, int]]:
+async def initial_sync_all_whitelisted_chats(
+    client: Optional[TelegramClient] = None,
+    config_manager: Optional[ConfigManager] = None,
+    meilisearch_service: Optional[MeiliSearchService] = None,
+    limit_per_chat: Optional[int] = None
+) -> Dict[int, Tuple[int, int]]:
     """
     同步所有白名单中聊天的历史消息（便捷函数）
     
+    此函数允许在调用时直接传入所需依赖，而不必创建新的实例。
+    
     Args:
+        client: TelegramClient实例（优先使用）
+        config_manager: ConfigManager实例（优先使用）
+        meilisearch_service: MeiliSearchService实例（优先使用）
         limit_per_chat: 每个聊天同步的最大消息数量，None表示不限制
         
     Returns:
-        Dict[int, Tuple[int, int]]: 映射聊天ID到处理结果的字典
+        Dict[int, Tuple[int, int]]: 映射聊天ID到处理结果的字典，
+                                  值为元组(处理的消息数量, 成功索引的消息数量)
     """
-    syncer = HistorySyncer()
+    # 如果提供了所有依赖项，使用UserBotClient的客户端而非创建新实例
+    if client and config_manager and meilisearch_service:
+        from user_bot.client import UserBotClient
+        user_bot_client = UserBotClient()
+        user_bot_client._client = client  # 直接使用传入的客户端
+        
+        syncer = HistorySyncer(
+            client=user_bot_client,
+            config_manager=config_manager,
+            meili_service=meilisearch_service
+        )
+    else:
+        # 向后兼容：未提供完整依赖时创建新实例
+        syncer = HistorySyncer()
+        
     return await syncer.initial_sync_all_whitelisted_chats(limit_per_chat)
