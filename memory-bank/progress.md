@@ -77,7 +77,7 @@
 *   **完成时间:** 2025/5/20 下午1:07 (大致时间，基于子任务报告)
 *   **执行者:** 💻 Code Mode
 *   **主要成果:**
-    *   实现了 `MeiliSearchService` 类 ([`core/meilisearch_service.py`](core/meilisearch_service.py:0))，提供与 Meilisearch 服务的完整交互功能。
+    *   实现了 `MeiliSearchService` 类 ([`core/meilisearch_service.py`](core/meilisearch_service.py:0))，提供与 Meilisearch 服务 的完整交互功能。
     *   功能包括：客户端初始化、索引自动创建与配置 (searchable, filterable, sortable attributes, ranking rules)、单条及批量消息索引、强大的搜索功能 (关键词、过滤、排序、分页) 和消息删除。
     *   额外实现了停用词 (`update_stop_words`) 和同义词 (`update_synonyms`) 的配置方法。
     *   编写了全面的集成测试 ([`tests/integration/test_meilisearch_service.py`](tests/integration/test_meilisearch_service.py:0))，覆盖所有核心功能，并在本地 Docker 环境下成功运行。
@@ -188,6 +188,19 @@
     *   实现了客户端的异步启动 (`client.start(bot_token=...)`) 和持续运行 (`client.run_until_disconnected()`) 逻辑。
     *   包含了必要的日志记录、错误处理 (如配置缺失、认证失败) 和优雅关闭逻辑。
 *   **详细日志:** 完整的需求分析、设计思路、实现细节、代码审查、潜在优化点和测试注意事项已记录在 [`memory-bank/activeContext.md`](memory-bank/activeContext.md) (版本：阶段1 - `search_bot/bot.py` 开发)。
+
+---
+
+### 任务 1.12: `main.py` (后端主入口) 开发 (已完成)
+*   **完成时间:** 2025/5/20 下午2:24 (大致时间，基于子任务报告)
+*   **执行者:** 💻 Code Mode
+*   **主要成果:**
+    *   成功创建并实现了位于项目根目录的 [`main.py`](main.py) 文件。
+    *   该文件作为后端应用的统一入口，能够使用 `asyncio.gather` 并发启动 `UserBotClient` 和 `SearchBot`。
+    *   配置了全局统一的日志记录系统。
+    *   实现了健壮的异常处理和优雅关闭机制，能够响应 `KeyboardInterrupt` (Ctrl+C) 和系统信号 (如 SIGTERM)，确保两个 Telethon 客户端都能正确断开连接。
+    *   代码结构清晰，考虑了跨平台兼容性。
+*   **详细日志:** 详细的设计方案、代码实现、优化迭代过程以及对优雅关闭机制的深入解释已记录在 [`memory-bank/activeContext.md`](memory-bank/activeContext.md) (版本：阶段1 - `main.py` 开发)。
 
 ---
 *(后续任务进展将在此文件下方持续更新)*
