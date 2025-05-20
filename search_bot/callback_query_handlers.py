@@ -93,7 +93,7 @@ class CallbackQueryHandlers:
             query = match.group(2)
             
             # 检查查询参数是否可能被截断
-            if len(query) >= 30:  # 在 message_formatters.py 中查询参数被限制为 30 个字符
+            if len(query) >= 20:  # 在 message_formatters.py 中查询参数被限制为 20 个字符
                 logger.warning(f"查询参数可能被截断: {query}")
                 # 这里我们仍然使用截断的查询，但记录警告
                 # 未来可以考虑实现用户会话存储或缓存完整查询
@@ -123,10 +123,11 @@ class CallbackQueryHandlers:
             # 格式化搜索结果
             formatted_message, buttons = format_search_results(results, page, total_pages)
             
-            # 更新消息
+            # 更新消息，使用纯文本模式
             await event.edit(
                 formatted_message,
-                buttons=buttons
+                buttons=buttons,
+                parse_mode=None  # 使用纯文本模式，避免Markdown解析冲突
             )
             
             logger.info(f"已更新分页消息: 页码={page}/{total_pages}, 用户={user_id}")
@@ -139,7 +140,7 @@ class CallbackQueryHandlers:
                 # 如果无法通过 answer 显示错误，尝试编辑消息
                 try:
                     error_message = format_error_message(f"加载页面出错: {str(e)}")
-                    await event.edit(error_message)
+                    await event.edit(error_message, parse_mode=None)  # 使用纯文本模式
                 except:
                     logger.error("无法通知用户错误信息")
     

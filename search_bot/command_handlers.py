@@ -131,7 +131,7 @@ class CommandHandlers:
                 f"发送 `/help` 获取更详细的使用说明和高级搜索语法。"
             )
             
-            await event.respond(welcome_message)
+            await event.respond(welcome_message, parse_mode=None)
             logger.info(f"已发送欢迎消息给用户 {sender.id}")
             
         except Exception as e:
@@ -149,7 +149,7 @@ class CommandHandlers:
         """
         try:
             help_message = format_help_message()
-            await event.respond(help_message)
+            await event.respond(help_message, parse_mode=None)
             logger.info(f"已发送帮助消息给用户 {(await event.get_sender()).id}")
             
         except Exception as e:
@@ -209,13 +209,13 @@ class CommandHandlers:
             formatted_message, buttons = format_search_results(results, page, total_pages)
             
             # 发送结果
-            await event.respond(formatted_message, buttons=buttons)
+            await event.respond(formatted_message, buttons=buttons, parse_mode=None)
             logger.info(f"已向用户 {(await event.get_sender()).id} 发送搜索结果，共 {total_hits} 条")
             
         except Exception as e:
             logger.error(f"处理 /search 命令时出错: {e}")
             error_message = format_error_message(str(e))
-            await event.respond(error_message)
+            await event.respond(error_message, parse_mode=None)
     
     def _parse_advanced_syntax(self, query: str) -> Tuple[str, Dict[str, Any]]:
         """
