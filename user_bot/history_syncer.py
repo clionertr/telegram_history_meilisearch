@@ -17,7 +17,7 @@ from telethon.errors import FloodWaitError, ChatAdminRequiredError, ChannelPriva
 from core.models import MeiliMessageDoc
 from core.meilisearch_service import MeiliSearchService
 from core.config_manager import ConfigManager
-from user_bot.client import UserBotClient
+# 删除对 UserBotClient 的直接导入，避免循环导入
 from user_bot.utils import generate_message_link, format_sender_name, determine_chat_type
 
 # 配置日志记录器
@@ -37,8 +37,8 @@ class HistorySyncer:
     """
     
     def __init__(
-        self, 
-        client: Optional[UserBotClient] = None,
+        self,
+        client: Optional[Any] = None,  # 使用 Any 类型替代 UserBotClient
         config_manager: Optional[ConfigManager] = None,
         meili_service: Optional[MeiliSearchService] = None
     ) -> None:
@@ -50,7 +50,12 @@ class HistorySyncer:
             config_manager: ConfigManager实例，如果未提供则创建新实例
             meili_service: MeiliSearchService实例，如果未提供则创建新实例
         """
-        self.client = client or UserBotClient()
+        # 延迟导入 UserBotClient，避免循环依赖
+        if client is None:
+            from user_bot.client import UserBotClient
+            self.client = UserBotClient()
+        else:
+            self.client = client
         self.config_manager = config_manager or ConfigManager()
         
         # 初始化MeiliSearchService（如果未提供）
@@ -384,7 +389,7 @@ async def sync_chat_history(chat_id: int, limit: Optional[int] = None, offset_da
 
 
 async def initial_sync_all_whitelisted_chats(
-    client: Optional[TelegramClient] = None,
+    client = None,  # 移除类型注解以避免循环导入
     config_manager: Optional[ConfigManager] = None,
     meilisearch_service: Optional[MeiliSearchService] = None,
     limit_per_chat: Optional[int] = None
@@ -404,9 +409,11 @@ async def initial_sync_all_whitelisted_chats(
         Dict[int, Tuple[int, int]]: 映射聊天ID到处理结果的字典，
                                   值为元组(处理的消息数量, 成功索引的消息数量)
     """
+    # 延迟导入 UserBotClient，避免循环导入
+    from user_bot.client import UserBotClient
+    
     # 如果提供了所有依赖项，使用UserBotClient的客户端而非创建新实例
     if client and config_manager and meilisearch_service:
-        from user_bot.client import UserBotClient
         user_bot_client = UserBotClient()
         user_bot_client._client = client  # 直接使用传入的客户端
         

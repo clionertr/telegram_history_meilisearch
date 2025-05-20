@@ -112,3 +112,64 @@
    - 验证是否能在 Meilisearch 中搜索到同步的历史消息
 
 通过这些测试可以确认我们的修改是否达到了预期目标：让 UserBot 在启动时自动注册事件处理器并执行一次历史消息同步。
+## 2025年5月20日 - 循环导入问题修复
+
+### 问题分析
+
+在尝试运行 `python main.py` 时，出现了以下错误：
+
+```
+Traceback (most recent call last):
+  File "/home/sinfor/codes/sync_all/main.py", line 17, in <module>
+    from user_bot.client import UserBotClient
+  File "/home/sinfor/codes/sync_all/user_bot/client.py", line 21, in <module>
+    from user_bot.history_syncer import initial_sync_all_whitelisted_chats
+  File "/home/sinfor/codes/sync_all/user_bot/history_syncer.py", line 20, in <module>
+    from user_bot.client import UserBotClient
+ImportError: cannot import name 'UserBotClient' from partially initialized module 'user_bot.client' (most likely due to a circular import) (/home/sinfor/codes/sync_all/user_bot/client.py)
+```
+
+这是一个典型的循环导入问题，源于以下导入关系：
+
+1. `user_bot/client.py` 在模块级别导入：
+   ```python
+   from user_bot.history_syncer import initial_sync_all_whitelisted_chats
+   ```
+
+2. `user_bot/history_syncer.py` 在模块级别导入：
+   ```python
+   from user_bot.client import UserBotClient
+   ```
+
+这导致了一个循环依赖的情况：
+- Python 开始执行 `client.py`
+- 它导入 `history_syncer.py`
+- `history_syncer.py` 尝试导入 `UserBotClient` 类
+- 但此时 `client.py` 尚未完成执行，所以 `UserBotClient` 类尚未完全定义
+- 导致 ImportError 错误
+
+### 解决方案
+
+有几种方法可以解决循环导入问题：
+
+1. **延迟导入**：将导入语句从模块级别移到函数内部
+2. **重构代码结构**：重新组织代码，消除循环依赖
+3. **创建中间层**：提取共享功能到一个新模块
+
+在本例中，最简单和影响最小的方法是使用延迟导入。我将修改：
+
+1. 在 `history_syncer.py` 中，删除模块级别对 `UserBotClient` 的导入，只在需要使用时（特别是在 `initial_sync_all_whitelisted_chats` 函数内部）导入。
+
+2. 修改 `initial_sync_all_whitelisted_chats` 函数签名，删除类型注解中对 `UserBotClient` 的引用。
+
+这样修改后，所有功能将保持不变，但可以解决循环导入问题。
+
+### 具体实现
+
+#### 修改 `user_bot/history_syncer.py`
+
+需要进行以下修改：
+
+1. 删除模块级别的 `from user_bot.client import UserBotClient` 导入
+2. 将对 `UserBotClient` 的导入移到 `initial_sync_all_whitelisted_chats` 函数内部
+3. 修改 `HistorySyncer` 类的 `__init__` 方法，改变类型注解方式
