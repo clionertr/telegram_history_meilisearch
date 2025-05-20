@@ -176,4 +176,18 @@
 *   **详细日志:** 详细的需求分析、设计思路、实现细节、局限性与注意事项、测试策略以及单元测试的实现已记录在 [`memory-bank/activeContext.md`](memory-bank/activeContext.md:0) (版本：阶段1 - `search_bot/callback_query_handlers.py` 开发)。
 
 ---
+
+### 任务 1.11: `search_bot/bot.py` 开发 (已完成)
+*   **完成时间:** 2025/5/20 下午2:13 (大致时间，基于子任务报告)
+*   **执行者:** 💻 Code Mode
+*   **主要成果:**
+    *   在 [`search_bot/bot.py`](search_bot/bot.py) 中成功实现了 `SearchBot` 类。
+    *   该类负责初始化 Telethon 客户端 (使用 Bot Token 进行认证，会话名为 `search_bot.session`，存储在 `.sessions/` 目录下)。
+    *   从 `ConfigManager` 安全获取 `API_ID`, `API_HASH`, `BOT_TOKEN`。
+    *   成功注册了来自 [`search_bot/command_handlers.py`](search_bot/command_handlers.py) 和 [`search_bot/callback_query_handlers.py`](search_bot/callback_query_handlers.py) 的事件处理器。
+    *   实现了客户端的异步启动 (`client.start(bot_token=...)`) 和持续运行 (`client.run_until_disconnected()`) 逻辑。
+    *   包含了必要的日志记录、错误处理 (如配置缺失、认证失败) 和优雅关闭逻辑。
+*   **详细日志:** 完整的需求分析、设计思路、实现细节、代码审查、潜在优化点和测试注意事项已记录在 [`memory-bank/activeContext.md`](memory-bank/activeContext.md) (版本：阶段1 - `search_bot/bot.py` 开发)。
+
+---
 *(后续任务进展将在此文件下方持续更新)*
