@@ -18,25 +18,37 @@ def generate_message_link(chat_id: int, message_id: int) -> str:
     生成 Telegram 消息链接
     
     根据 chat_id 和 message_id 生成可点击的 Telegram 消息链接。
-    不同类型的聊天(用户、群组、频道)可能有不同的链接格式。
+    不同类型的聊天(用户、群组、频道)有不同的链接格式。
+    
+    链接格式说明:
+    1. 超级群组和频道: t.me/c/{chat_id}/{message_id} (需取chat_id绝对值)
+    2. 用户私聊: 通常不能通过公共链接访问，但在某些情况下可使用 t.me/{username}/{message_id}
+       由于我们没有username信息，对用户私聊也使用 c/ 格式
     
     Args:
-        chat_id: 聊天 ID (正数表示用户，负数表示群组/频道)
+        chat_id: 聊天 ID (正数通常表示用户，负数表示群组/频道)
         message_id: 消息 ID
         
     Returns:
         str: Telegram 消息链接
     """
-    # 处理不同类型的聊天
-    # - 用户聊天通常是正数 ID
-    # - 群组和频道是负数 ID，需要取绝对值并使用 c/ 路径
-    
-    # 简化实现：所有消息都使用 c/ 路径格式
-    # 注意：这是一个简化的实现，实际的链接格式可能需要根据 Telegram API 的具体行为进行调整
+    # 获取绝对值，去掉可能的负号
     abs_chat_id = abs(chat_id)
-    link = f"https://t.me/c/{abs_chat_id}/{message_id}"
     
-    logger.debug(f"为消息生成链接: chat_id={chat_id}, message_id={message_id}, link={link}")
+    # 根据chat_id的符号判断聊天类型
+    # 注意：这是基于一般规则的判断，可能存在例外情况
+    if chat_id < 0:
+        # 负数ID: 通常是超级群组或频道，使用c/路径格式
+        link = f"https://t.me/c/{abs_chat_id}/{message_id}"
+        logger.debug(f"为群组/频道消息生成链接: chat_id={chat_id}, link={link}")
+    else:
+        # 正数ID: 通常是用户私聊
+        # 私聊消息一般无法通过公共链接访问，除非是与机器人的对话
+        # 我们也使用c/路径尝试生成链接，但这可能不适用于所有情况
+        link = f"https://t.me/c/{abs_chat_id}/{message_id}"
+        logger.debug(f"为用户私聊消息生成链接: chat_id={chat_id}, link={link}")
+        # 注意：如果已知username，理想的形式是 f"https://t.me/{username}/{message_id}"
+    
     return link
 
 
