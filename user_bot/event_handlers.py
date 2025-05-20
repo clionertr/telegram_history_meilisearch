@@ -163,7 +163,17 @@ async def handle_new_message(event, config_manager: Optional[ConfigManager] = No
         meili_service = meili_service or get_meili_search_service()
         result = meili_service.index_message(message_doc)
         
-        logger.info(f"消息索引成功: id={message_doc.id}, task_id={result.get('taskUid', 'unknown')}")
+        # 适配新版 Meilisearch API 返回值处理
+        task_id = "unknown"
+        if hasattr(result, 'task_uid'):
+            task_id = result.task_uid
+        elif hasattr(result, 'uid'):
+            task_id = result.uid
+        elif isinstance(result, dict) and 'taskUid' in result:
+            # 兼容旧版 API
+            task_id = result['taskUid']
+            
+        logger.info(f"消息索引成功: id={message_doc.id}, task_id={task_id}")
         
     except Exception as e:
         logger.error(f"处理新消息时发生错误: {str(e)}", exc_info=True)
@@ -209,7 +219,17 @@ async def handle_message_edited(event, config_manager: Optional[ConfigManager] =
         meili_service = meili_service or get_meili_search_service()
         result = meili_service.index_message(message_doc)
         
-        logger.info(f"消息更新成功: id={message_doc.id}, task_id={result.get('taskUid', 'unknown')}")
+        # 适配新版 Meilisearch API 返回值处理
+        task_id = "unknown"
+        if hasattr(result, 'task_uid'):
+            task_id = result.task_uid
+        elif hasattr(result, 'uid'):
+            task_id = result.uid
+        elif isinstance(result, dict) and 'taskUid' in result:
+            # 兼容旧版 API
+            task_id = result['taskUid']
+            
+        logger.info(f"消息更新成功: id={message_doc.id}, task_id={task_id}")
         logger.debug(f"更新策略: 使用文档替换方式更新索引中的消息")
         
     except Exception as e:

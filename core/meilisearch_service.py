@@ -99,7 +99,20 @@ class MeiliSearchService:
         # 检查是否需要创建索引
         if self.index_name not in index_names:
             self.logger.info(f"索引 {self.index_name} 不存在，正在创建...")
-            self.client.create_index(self.index_name)
+            # 显式指定 id 字段为主键
+            self.client.create_index(self.index_name, {'primaryKey': 'id'})
+            self.logger.info(f"已指定 'id' 为索引的主键")
+        else:
+            # 确保已有索引的主键设置正确
+            try:
+                index_info = self.client.get_index(self.index_name)
+                if not hasattr(index_info, 'primary_key') or index_info.primary_key != 'id':
+                    self.logger.warning(f"索引 {self.index_name} 的主键不是 'id'，尝试更新")
+                    # 注意：有些版本的 Meilisearch 不允许修改已有索引的主键
+                    # 此处可能需要删除并重建索引
+                    pass
+            except Exception as e:
+                self.logger.warning(f"检查索引主键时出错: {str(e)}")
         
         # 配置索引设置
         # 可搜索属性 - text 优先级最高
@@ -154,7 +167,18 @@ class MeiliSearchService:
         
         # 添加到 Meilisearch 索引
         result = self.index.add_documents([doc_dict])
-        self.logger.debug(f"已索引消息: {message_doc.id}, 任务ID: {result['taskUid']}")
+        
+        # 适配新版 Meilisearch API 返回值处理
+        task_id = "unknown"
+        if hasattr(result, 'task_uid'):
+            task_id = result.task_uid
+        elif hasattr(result, 'uid'):
+            task_id = result.uid
+        elif isinstance(result, dict) and 'taskUid' in result:
+            # 兼容旧版 API
+            task_id = result['taskUid']
+            
+        self.logger.debug(f"已索引消息: {message_doc.id}, 任务ID: {task_id}")
         
         return result
     
@@ -177,7 +201,18 @@ class MeiliSearchService:
         
         # 批量添加到 Meilisearch 索引
         result = self.index.add_documents(docs_dict)
-        self.logger.info(f"已批量索引 {len(message_docs)} 条消息，任务ID: {result['taskUid']}")
+        
+        # 适配新版 Meilisearch API 返回值处理
+        task_id = "unknown"
+        if hasattr(result, 'task_uid'):
+            task_id = result.task_uid
+        elif hasattr(result, 'uid'):
+            task_id = result.uid
+        elif isinstance(result, dict) and 'taskUid' in result:
+            # 兼容旧版 API
+            task_id = result['taskUid']
+            
+        self.logger.info(f"已批量索引 {len(message_docs)} 条消息，任务ID: {task_id}")
         
         return result
     
@@ -230,7 +265,18 @@ class MeiliSearchService:
             Meilisearch 的响应字典，通常包含任务信息
         """
         result = self.index.delete_document(document_id)
-        self.logger.info(f"已删除消息: {document_id}, 任务ID: {result['taskUid']}")
+        
+        # 适配新版 Meilisearch API 返回值处理
+        task_id = "unknown"
+        if hasattr(result, 'task_uid'):
+            task_id = result.task_uid
+        elif hasattr(result, 'uid'):
+            task_id = result.uid
+        elif isinstance(result, dict) and 'taskUid' in result:
+            # 兼容旧版 API
+            task_id = result['taskUid']
+            
+        self.logger.info(f"已删除消息: {document_id}, 任务ID: {task_id}")
         
         return result
     
@@ -247,7 +293,18 @@ class MeiliSearchService:
             Meilisearch 的响应字典
         """
         result = self.index.update_stop_words(stop_words)
-        self.logger.info(f"已更新停用词列表，词数: {len(stop_words)}, 任务ID: {result['taskUid']}")
+        
+        # 适配新版 Meilisearch API 返回值处理
+        task_id = "unknown"
+        if hasattr(result, 'task_uid'):
+            task_id = result.task_uid
+        elif hasattr(result, 'uid'):
+            task_id = result.uid
+        elif isinstance(result, dict) and 'taskUid' in result:
+            # 兼容旧版 API
+            task_id = result['taskUid']
+            
+        self.logger.info(f"已更新停用词列表，词数: {len(stop_words)}, 任务ID: {task_id}")
         
         return result
     
@@ -264,6 +321,17 @@ class MeiliSearchService:
             Meilisearch 的响应字典
         """
         result = self.index.update_synonyms(synonyms)
-        self.logger.info(f"已更新同义词词典，词组数: {len(synonyms)}, 任务ID: {result['taskUid']}")
+        
+        # 适配新版 Meilisearch API 返回值处理
+        task_id = "unknown"
+        if hasattr(result, 'task_uid'):
+            task_id = result.task_uid
+        elif hasattr(result, 'uid'):
+            task_id = result.uid
+        elif isinstance(result, dict) and 'taskUid' in result:
+            # 兼容旧版 API
+            task_id = result['taskUid']
+            
+        self.logger.info(f"已更新同义词词典，词组数: {len(synonyms)}, 任务ID: {task_id}")
         
         return result

@@ -345,7 +345,19 @@ class HistorySyncer:
         try:
             # 调用MeiliSearchService的index_messages_bulk方法
             result = self.meili_service.index_messages_bulk(message_batch)
-            logger.debug(f"批量索引 {len(message_batch)} 条消息，任务ID: {result.get('taskUid', 'unknown')}")
+            
+            # 适配新版 Meilisearch API 返回值处理
+            # TaskInfo 对象可能有 task_uid 或 uid 属性
+            task_id = "unknown"
+            if hasattr(result, 'task_uid'):
+                task_id = result.task_uid
+            elif hasattr(result, 'uid'):
+                task_id = result.uid
+            elif isinstance(result, dict) and 'taskUid' in result:
+                # 兼容旧版 API
+                task_id = result['taskUid']
+                
+            logger.debug(f"批量索引 {len(message_batch)} 条消息，任务ID: {task_id}")
             return True
             
         except Exception as e:

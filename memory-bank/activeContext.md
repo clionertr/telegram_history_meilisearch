@@ -173,3 +173,68 @@ ImportError: cannot import name 'UserBotClient' from partially initialized modul
 1. 删除模块级别的 `from user_bot.client import UserBotClient` 导入
 2. 将对 `UserBotClient` 的导入移到 `initial_sync_all_whitelisted_chats` 函数内部
 3. 修改 `HistorySyncer` 类的 `__init__` 方法，改变类型注解方式
+## 2025年5月20日 - Meilisearch API 兼容性问题修复
+
+在修复循环导入问题后，我们运行程序发现了一个新问题：
+
+```
+2025-05-20 15:02:04,593 - user_bot.history_syncer - ERROR - 索引消息批次时发生错误: 'TaskInfo' object is not subscriptable
+```
+
+### 问题分析
+
+这个错误是因为 Meilisearch Python SDK 的 API 返回类型发生了变化。在旧版本中，API 方法（如 `add_documents`）会返回一个字典，可以通过字典语法访问其内容（如 `result['taskUid']`）。但在新版本中，这些方法返回的是 `TaskInfo` 对象，需要通过属性访问（如 `result.task_uid`）。
+
+我们的代码中在多个地方都使用了旧版 API 的访问方式，导致运行时出错。
+
+### 修复方案
+
+为了使代码同时兼容新旧版 Meilisearch API，我对以下文件进行了修改：
+
+1. **user_bot/history_syncer.py**：
+   - 修改 `_index_message_batch` 方法，改进对 Meilisearch 返回值的处理
+   - 添加了对不同返回类型的检测和适配
+
+2. **core/meilisearch_service.py**：
+   - 修改所有使用 Meilisearch API 返回值的地方
+   - 添加了统一的结果处理逻辑，检测返回值类型并提取 `task_uid`、`uid` 或 `taskUid`
+
+3. **user_bot/event_handlers.py**：
+   - 更新了事件处理函数中对 Meilisearch 返回值的处理
+
+修复后，代码能够同时兼容新旧版 Meilisearch API，无论返回值是 `TaskInfo` 对象还是含有 `taskUid` 键的字典。
+## 2025年5月20日 - Meilisearch 主键问题修复
+
+在修复了 TaskInfo 对象不可下标访问的问题后，我们遇到了另一个问题。从 Meilisearch 服务的错误日志来看：
+
+```json
+{
+  "error": {
+    "message": "The primary key inference failed as the engine found 4 fields ending with `id` in their names: 'chat_id' and 'id'. Please specify the primary key manually using the `primaryKey` query parameter.",
+    "code": "index_primary_key_multiple_candidates_found",
+    "type": "invalid_request",
+    "link": "https://docs.meilisearch.com/errors#index_primary_key_multiple_candidates_found"
+  }
+}
+```
+
+### 问题分析
+
+在 Meilisearch 中，每个索引需要一个主键来唯一标识文档。当有多个字段名以 `id` 结尾时（如 `id` 和 `chat_id`），Meilisearch 无法自动推断哪个字段应该作为主键，因此需要明确指定。
+
+### 修复方案
+
+修改 `core/meilisearch_service.py` 文件中的 `ensure_index_setup` 方法，在创建索引时明确指定 `id` 字段为主键：
+
+```python
+# 检查是否需要创建索引
+if self.index_name not in index_names:
+    self.logger.info(f"索引 {self.index_name} 不存在，正在创建...")
+    # 显式指定 id 字段为主键
+    self.client.create_index(self.index_name, {'primaryKey': 'id'})
+    self.logger.info(f"已指定 'id' 为索引的主键")
+```
+
+同时，为了处理已存在的索引，我们添加了检查代码，当索引已存在但主键设置不正确时，记录警告日志。
+
+注意：对于已经创建的索引，Meilisearch 可能不允许更改主键。在这种情况下，可能需要删除并重建索引。或者，如果索引中已经有重要数据，可能需要备份数据、重建索引，然后恢复数据。
