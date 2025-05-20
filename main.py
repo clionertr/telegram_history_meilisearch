@@ -12,16 +12,20 @@ import asyncio
 import logging
 import signal
 import sys
+import uvicorn
 from typing import Optional, List
 
 from user_bot.client import UserBotClient
 from search_bot.bot import SearchBot
+from api.main import app as fastapi_app
 
 # 全局变量，存储客户端实例，用于在程序退出时确保它们被断开连接
 user_bot_client: Optional[UserBotClient] = None
 search_bot: Optional[SearchBot] = None
 # 存储任务对象，用于在需要时取消任务
 tasks: List[asyncio.Task] = []
+# FastAPI 服务器实例
+fastapi_server: Optional[uvicorn.Server] = None
 
 def setup_logging(level=logging.INFO) -> None:
     """
@@ -86,15 +90,24 @@ async def shutdown_clients() -> None:
             logger.info("SearchBot已断开连接")
         except Exception as e:
             logger.error(f"断开SearchBot连接时出错: {str(e)}")
+    
+    # 关闭FastAPI服务器
+    if fastapi_server is not None:
+        logger.info("正在关闭FastAPI服务器...")
+        try:
+            await fastapi_server.shutdown()
+            logger.info("FastAPI服务器已关闭")
+        except Exception as e:
+            logger.error(f"关闭FastAPI服务器时出错: {str(e)}")
 
 async def async_main() -> None:
     """
     主异步函数
     
-    负责实例化并并发运行UserBot和SearchBot客户端
+    负责实例化并并发运行UserBot、SearchBot客户端和FastAPI服务器
     使用asyncio.create_task创建独立任务，以便于管理每个任务的生命周期
     """
-    global user_bot_client, search_bot, tasks
+    global user_bot_client, search_bot, fastapi_server, tasks
     
     logger = logging.getLogger(__name__)
     logger.info("正在启动Telegram中文历史消息搜索服务...")
@@ -107,6 +120,17 @@ async def async_main() -> None:
         
         logger.info("已创建UserBot和SearchBot实例")
         
+        # 配置并创建FastAPI服务器
+        config = uvicorn.Config(
+            fastapi_app,
+            host="0.0.0.0",
+            port=8000,
+            log_level="info",
+            reload=False
+        )
+        fastapi_server = uvicorn.Server(config)
+        logger.info("已创建FastAPI服务器实例")
+        
         # 创建并存储任务，使用create_task而不是直接使用gather
         # 这样我们可以在需要时单独取消任务
         user_bot_task = asyncio.create_task(
@@ -117,15 +141,19 @@ async def async_main() -> None:
             search_bot.run(),
             name="SearchBotTask"
         )
+        fastapi_task = asyncio.create_task(
+            fastapi_server.serve(),
+            name="FastAPITask"
+        )
         
         # 存储任务引用，以便于后续管理
-        tasks = [user_bot_task, search_bot_task]
+        tasks = [user_bot_task, search_bot_task, fastapi_task]
         
-        logger.info("已启动两个客户端任务")
+        logger.info("已启动所有服务任务")
         
         # 等待所有任务完成
         # 如果任务被取消或出错，will_cancel_current会被设置为True，异常将被传播
-        await asyncio.gather(user_bot_task, search_bot_task)
+        await asyncio.gather(user_bot_task, search_bot_task, fastapi_task)
         
     except Exception as e:
         logger.exception(f"运行客户端时发生错误: {str(e)}")
