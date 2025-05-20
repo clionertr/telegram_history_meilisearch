@@ -249,6 +249,9 @@ class MeiliSearchService:
         self.logger.debug(f"执行搜索: 关键词='{query}', 参数={search_params}")
         results = self.index.search(query, search_params)
         
+        # 记录原始搜索结果以便排查问题
+        self.logger.debug(f"Meilisearch 原始搜索结果: {results}")
+        
         # 处理不同版本 Meilisearch API 的返回结构
         # 确保结果包含必要的键，兼容新旧版 API
         # 标准化为字典格式
@@ -271,12 +274,25 @@ class MeiliSearchService:
         if 'hits' not in results_dict:
             results_dict['hits'] = []
         if 'estimatedTotalHits' not in results_dict:
-            # 尝试从不同可能的属性名获取
+            # 尝试从不同可能的属性名获取真实的总命中数
+            # 按优先级顺序尝试不同的字段
             if hasattr(results, 'estimated_total_hits'):
                 results_dict['estimatedTotalHits'] = results.estimated_total_hits
             elif hasattr(results, 'nb_hits'):
                 results_dict['estimatedTotalHits'] = results.nb_hits
+            # 尝试从totalHits字段获取
+            elif hasattr(results, 'totalHits'):
+                results_dict['estimatedTotalHits'] = results.totalHits
+            elif 'totalHits' in results_dict:
+                results_dict['estimatedTotalHits'] = results_dict['totalHits']
+            # 如果有totalPages，根据totalPages和每页结果数计算
+            elif hasattr(results, 'totalPages'):
+                results_dict['estimatedTotalHits'] = results.totalPages * search_params['hitsPerPage']
+            elif 'totalPages' in results_dict:
+                results_dict['estimatedTotalHits'] = results_dict['totalPages'] * search_params['hitsPerPage']
+            # 最后才回退到使用当前页的结果数量
             else:
+                self.logger.warning("无法找到真实的总命中数，使用当前页结果数量作为估计值")
                 results_dict['estimatedTotalHits'] = len(results_dict['hits'])
         
         if 'processingTimeMs' not in results_dict:
@@ -292,7 +308,11 @@ class MeiliSearchService:
         # 记录搜索结果信息
         self.logger.info(
             f"搜索 '{query}' 找到 {results_dict['estimatedTotalHits']} 条结果，"
-            f"处理时间: {results_dict['processingTimeMs']}ms"
+            f"处理时间: {results_dict['processingTimeMs']}ms，"
+            f"每页限制: {search_params['hitsPerPage']}，"
+            f"当前页码: {search_params['page']}，"
+            f"实际返回结果数: {len(results_dict['hits'])}，"
+            f"估计总结果数: {results_dict['estimatedTotalHits']}"
         )
         
         return results_dict

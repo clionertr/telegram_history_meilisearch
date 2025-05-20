@@ -8,6 +8,7 @@
 """
 
 import logging
+import math
 from typing import Dict, List, Optional, Any, Union
 from datetime import datetime
 
@@ -80,7 +81,7 @@ async def search_messages(
         符合 SearchResponse 模型的响应字典
     """
     logger = logging.getLogger(__name__)
-    logger.info(f"收到搜索请求: {search_request.query}, 页码: {search_request.page}")
+    logger.info(f"收到搜索请求: {search_request.query}, 页码: {search_request.page}, 每页结果数: {search_request.hits_per_page}")
     
     try:
         # 构建过滤条件字符串
@@ -119,6 +120,10 @@ async def search_messages(
             page=search_request.page,
             hits_per_page=search_request.hits_per_page
         )
+        # 详细记录搜索结果原始数据
+        logger.info(f"Meilisearch返回的estimatedTotalHits: {search_results.get('estimatedTotalHits', 0)}")
+        logger.info(f"请求的hits_per_page: {search_request.hits_per_page}")
+        logger.info(f"Meilisearch返回的hits数量: {len(search_results.get('hits', []))}")
         
         # 处理搜索结果，确保符合响应模型
         hits = []
@@ -126,6 +131,7 @@ async def search_messages(
             # 创建文本摘要，如果原文太长则截断
             text = hit.get('text', '')
             text_snippet = text[:200] + ('...' if len(text) > 200 else '')
+            
             
             # 创建结果项
             hit_item = SearchResultItem(
@@ -148,7 +154,7 @@ async def search_messages(
             "estimatedTotalHits": search_results.get('estimatedTotalHits', 0)
         }
         
-        logger.info(f"搜索 '{search_request.query}' 找到 {len(hits)} 条结果")
+        logger.info(f"搜索 '{search_request.query}' 找到 {len(hits)} 条结果，estimatedTotalHits={response['estimatedTotalHits']}，计算得到totalPages={math.ceil(response['estimatedTotalHits'] / search_request.hits_per_page)}")
         return response
         
     except Exception as e:

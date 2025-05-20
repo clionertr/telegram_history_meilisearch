@@ -57,9 +57,13 @@ function ResultsList() {
     );
   };
 
-  // 分页导航元素 - 仅当有多页结果时显示
+  // 分页导航元素 - 当有多页结果时显示
   const renderPagination = () => {
-    if (totalPages <= 1) return null;
+    // 当估计总结果数正好等于每页显示数量时，可能是API限制了返回的结果数
+    // 在这种情况下，即使totalPages=1，也显示分页，以便用户可以尝试查看更多结果
+    const apiLimitedResults = totalHits > 0 && totalHits === hitsPerPage;
+    
+    if (totalPages <= 1 && !apiLimitedResults) return null;
 
     return (
       <div className="flex justify-center items-center mt-6 space-x-2">

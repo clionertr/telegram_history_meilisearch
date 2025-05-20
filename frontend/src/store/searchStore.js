@@ -19,7 +19,7 @@ const useSearchStore = create((set, get) => ({
     currentPage: 1,    // 当前页码
     totalPages: 0,     // 总页数
     totalHits: 0,      // 总结果数
-    hitsPerPage: 10,   // 每页结果数
+    hitsPerPage: 5,    // 每页结果数 (设为5，便于测试分页)
   },
 
   // 筛选条件
