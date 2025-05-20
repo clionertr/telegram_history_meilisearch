@@ -110,4 +110,18 @@
 *   **详细日志:** 详细的设计思路、实现步骤、关键决策、字段提取逻辑和错误处理已记录在 [`memory-bank/activeContext.md`](memory-bank/activeContext.md:0) (版本：阶段1 - `user_bot/event_handlers.py` 开发)。
 
 ---
+
+### 任务 1.6: `user_bot/history_syncer.py` 开发 (已完成)
+*   **完成时间:** 2025/5/20 下午1:33 (大致时间，基于子任务报告)
+*   **执行者:** 💻 Code Mode
+*   **主要成果:**
+    *   在 [`user_bot/history_syncer.py`](user_bot/history_syncer.py:0) 中实现了 `HistorySyncer` 类及便捷函数 `sync_chat_history` 和 `initial_sync_all_whitelisted_chats`。
+    *   功能包括：从指定聊天或所有白名单聊天中拉取历史消息，分批处理消息以避免 API 限制和内存问题。
+    *   实现了消息到 `MeiliMessageDoc` 的转换，并准备了批量索引到 Meilisearch 的逻辑 (实际调用由 `MeiliSearchService` 处理)。
+    *   包含了对 Telegram API 速率限制 (`FloodWaitError`) 和其他常见错误的健壮处理。
+    *   初步实现了在内存中记录每个 chat 的最后同步点 (message_id, date, timestamp)，为未来增量同步打下基础。
+    *   代码遵循 PEP 8，包含类型提示和详细文档字符串。
+*   **详细日志:** 详细的需求分析、设计思路、实现细节、错误处理、同步点管理、可能的优化点和测试思路已记录在 [`memory-bank/activeContext.md`](memory-bank/activeContext.md:0) (版本：阶段1 - `user_bot/history_syncer.py` 开发)。
+
+---
 *(后续任务进展将在此文件下方持续更新)*
