@@ -162,3 +162,4 @@ Thumbs.db
 # Telegram session files
 .sessions/
 *.session
+sync_points.json

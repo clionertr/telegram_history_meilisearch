@@ -16,7 +16,7 @@ from telethon.errors import FloodWaitError, ChatAdminRequiredError, ChannelPriva
 
 from core.models import MeiliMessageDoc
 from core.meilisearch_service import MeiliSearchService
-from core.config_manager import ConfigManager
+from core.config_manager import ConfigManager, SyncPointManager
 # 删除对 UserBotClient 的直接导入，避免循环导入
 from user_bot.utils import generate_message_link, format_sender_name, determine_chat_type
 
@@ -40,7 +40,8 @@ class HistorySyncer:
         self,
         client: Optional[Any] = None,  # 使用 Any 类型替代 UserBotClient
         config_manager: Optional[ConfigManager] = None,
-        meili_service: Optional[MeiliSearchService] = None
+        meili_service: Optional[MeiliSearchService] = None,
+        sync_point_manager: Optional[SyncPointManager] = None
     ) -> None:
         """
         初始化历史消息同步器
@@ -70,31 +71,75 @@ class HistorySyncer:
         else:
             self.meili_service = meili_service
         
-        # 存储最后同步点
+        # 初始化同步点管理器（如果未提供）
+        self.sync_point_manager = sync_point_manager or SyncPointManager()
+        
+        # 保留内存中的最后同步点（向后兼容）
         self.last_sync_points: Dict[int, Dict[str, Any]] = {}
         
         logger.info("历史消息同步器初始化完成")
 
     async def sync_chat_history(
-        self, 
-        chat_id: int, 
-        limit: Optional[int] = None, 
-        offset_date: Optional[datetime] = None
+        self,
+        chat_id: int,
+        limit: Optional[int] = None,
+        offset_date: Optional[datetime] = None,
+        date_from: Optional[datetime] = None,
+        date_to: Optional[datetime] = None,
+        incremental: bool = True
     ) -> Tuple[int, int]:
         """
         同步指定聊天的历史消息
         
-        从指定的chat_id拉取历史消息，分批处理并索引到Meilisearch
+        从指定的chat_id拉取历史消息，分批处理并索引到Meilisearch。
+        支持增量同步（基于最后同步点）和时间范围筛选。
         
         Args:
             chat_id: 聊天ID
             limit: 最大消息数量，None表示不限制
-            offset_date: 开始时间点，None表示从最新消息开始
+            offset_date: 开始时间点，None表示从最新消息开始（被增量同步或date_from覆盖时忽略）
+            date_from: 开始日期，仅同步该日期之后的消息
+            date_to: 结束日期，仅同步该日期之前的消息
+            incremental: 是否启用增量同步，为True时会查找上次同步点并从那开始同步
             
         Returns:
             Tuple[int, int]: (处理的消息数量, 成功索引的消息数量)
         """
-        logger.info(f"开始同步聊天 {chat_id} 的历史消息")
+        # 确定同步模式和范围
+        sync_mode = "全量同步"
+        last_sync_point = None
+        
+        # 如果启用增量同步，尝试获取最后同步点
+        if incremental:
+            last_sync_point = self.sync_point_manager.get_sync_point(chat_id)
+            if last_sync_point:
+                sync_mode = "增量同步"
+                # 使用最后同步点的消息ID和日期
+                message_id = last_sync_point.get("message_id")
+                last_date_timestamp = last_sync_point.get("date")
+                last_date = datetime.fromtimestamp(last_date_timestamp) if last_date_timestamp else None
+                
+                logger.info(f"检索到聊天 {chat_id} 的最后同步点: message_id={message_id}, date={last_date}")
+                
+                # 如果提供了date_from，则使用date_from和last_date中较新的一个
+                if date_from and last_date and date_from > last_date:
+                    offset_date = date_from
+                    logger.info(f"使用指定的date_from({date_from})作为开始时间点，因为它比最后同步日期({last_date})更新")
+                elif last_date:
+                    offset_date = last_date
+                    logger.info(f"使用最后同步日期({last_date})作为开始时间点")
+            else:
+                logger.info(f"未找到聊天 {chat_id} 的同步点，将执行全量同步")
+        
+        # 时间范围筛选
+        if date_from and (not offset_date or date_from > offset_date):
+            offset_date = date_from
+            logger.info(f"使用date_from({date_from})作为开始时间点")
+            
+        if date_to:
+            logger.info(f"将仅同步 {date_to} 之前的消息")
+        
+        logger.info(f"开始{sync_mode}聊天 {chat_id} 的历史消息")
         
         # 获取客户端实例
         client = self.client.get_client()
@@ -149,6 +194,10 @@ class HistorySyncer:
                 # 跳过非文本消息
                 if not message.text:
                     continue
+                    
+                # 时间范围过滤 - 如果设置了date_to且消息日期晚于date_to，跳过
+                if date_to and message.date > date_to:
+                    continue
                 
                 processed_count += 1
                 
@@ -198,7 +247,14 @@ class HistorySyncer:
             attempts += 1
             if attempts < MAX_ATTEMPTS:
                 logger.info(f"重试同步聊天 {chat_id} 历史消息 (尝试 {attempts+1}/{MAX_ATTEMPTS})")
-                return await self.sync_chat_history(chat_id, limit, offset_date)
+                return await self.sync_chat_history(
+                    chat_id=chat_id,
+                    limit=limit,
+                    offset_date=offset_date,
+                    date_from=date_from,
+                    date_to=date_to,
+                    incremental=incremental
+                )
             else:
                 logger.error(f"同步聊天 {chat_id} 历史消息失败: 超过最大重试次数")
                 return processed_count, indexed_count
@@ -212,7 +268,13 @@ class HistorySyncer:
             logger.error(f"同步聊天 {chat_id} 历史消息时发生错误: {str(e)}")
             return processed_count, indexed_count
     
-    async def initial_sync_all_whitelisted_chats(self, limit_per_chat: Optional[int] = None) -> Dict[int, Tuple[int, int]]:
+    async def initial_sync_all_whitelisted_chats(
+        self,
+        limit_per_chat: Optional[int] = None,
+        incremental: bool = True,
+        date_from: Optional[datetime] = None,
+        date_to: Optional[datetime] = None
+    ) -> Dict[int, Tuple[int, int]]:
         """
         同步所有白名单中聊天的历史消息
         
@@ -220,10 +282,13 @@ class HistorySyncer:
         
         Args:
             limit_per_chat: 每个聊天同步的最大消息数量，None表示不限制
+            incremental: 是否启用增量同步，为True时会查找上次同步点并从那开始同步
+            date_from: 开始日期，仅同步该日期之后的消息
+            date_to: 结束日期，仅同步该日期之前的消息
             
         Returns:
             Dict[int, Tuple[int, int]]: 映射聊天ID到处理结果的字典，
-                                      值为元组(处理的消息数量, 成功索引的消息数量)
+                                       值为元组(处理的消息数量, 成功索引的消息数量)
         """
         logger.info("开始同步所有白名单中的聊天历史消息")
         
@@ -243,7 +308,13 @@ class HistorySyncer:
             logger.info(f"开始同步聊天 {chat_id}")
             
             try:
-                processed, indexed = await self.sync_chat_history(chat_id, limit=limit_per_chat)
+                processed, indexed = await self.sync_chat_history(
+                    chat_id=chat_id,
+                    limit=limit_per_chat,
+                    incremental=incremental,
+                    date_from=date_from,
+                    date_to=date_to
+                )
                 results[chat_id] = (processed, indexed)
                 
                 # 简单防止频率限制
@@ -372,6 +443,7 @@ class HistorySyncer:
             chat_id: 聊天ID
             message: 最后处理的消息
         """
+        # 保存在内存中（向后兼容）
         self.last_sync_points[chat_id] = {
             "message_id": message.id,
             "date": message.date,
@@ -380,11 +452,23 @@ class HistorySyncer:
         
         logger.debug(f"更新聊天 {chat_id} 的最后同步点: message_id={message.id}, date={message.date}")
         
-        # TODO: 将最后同步点持久化存储，可以使用ConfigManager或数据库
-        # 当前仅在内存中保存，后续可以实现持久化方案
+        # 持久化存储同步点
+        self.sync_point_manager.update_sync_point(
+            chat_id=chat_id,
+            message_id=message.id,
+            date=message.date,
+            additional_info={"timestamp": int(time.time())}
+        )
 
 
-async def sync_chat_history(chat_id: int, limit: Optional[int] = None, offset_date: Optional[datetime] = None) -> Tuple[int, int]:
+async def sync_chat_history(
+    chat_id: int,
+    limit: Optional[int] = None,
+    offset_date: Optional[datetime] = None,
+    date_from: Optional[datetime] = None,
+    date_to: Optional[datetime] = None,
+    incremental: bool = True
+) -> Tuple[int, int]:
     """
     同步指定聊天的历史消息（便捷函数）
     
@@ -392,19 +476,33 @@ async def sync_chat_history(chat_id: int, limit: Optional[int] = None, offset_da
         chat_id: 聊天ID
         limit: 最大消息数量，None表示不限制
         offset_date: 开始时间点，None表示从最新消息开始
+        date_from: 开始日期，仅同步该日期之后的消息
+        date_to: 结束日期，仅同步该日期之前的消息
+        incremental: 是否启用增量同步，为True时会查找上次同步点并从那开始同步
         
     Returns:
         Tuple[int, int]: (处理的消息数量, 成功索引的消息数量)
     """
     syncer = HistorySyncer()
-    return await syncer.sync_chat_history(chat_id, limit, offset_date)
+    return await syncer.sync_chat_history(
+        chat_id=chat_id,
+        limit=limit,
+        offset_date=offset_date,
+        date_from=date_from,
+        date_to=date_to,
+        incremental=incremental
+    )
 
 
 async def initial_sync_all_whitelisted_chats(
     client = None,  # 移除类型注解以避免循环导入
     config_manager: Optional[ConfigManager] = None,
     meilisearch_service: Optional[MeiliSearchService] = None,
-    limit_per_chat: Optional[int] = None
+    sync_point_manager: Optional[SyncPointManager] = None,
+    limit_per_chat: Optional[int] = None,
+    incremental: bool = True,
+    date_from: Optional[datetime] = None,
+    date_to: Optional[datetime] = None
 ) -> Dict[int, Tuple[int, int]]:
     """
     同步所有白名单中聊天的历史消息（便捷函数）
@@ -432,10 +530,51 @@ async def initial_sync_all_whitelisted_chats(
         syncer = HistorySyncer(
             client=user_bot_client,
             config_manager=config_manager,
-            meili_service=meilisearch_service
+            meili_service=meilisearch_service,
+            sync_point_manager=sync_point_manager
         )
     else:
         # 向后兼容：未提供完整依赖时创建新实例
         syncer = HistorySyncer()
+    
+    # 使用修改后的函数签名调用同步方法
+    results = await syncer.initial_sync_all_whitelisted_chats(
+        limit_per_chat=limit_per_chat,
+        incremental=incremental,
+        date_from=date_from,
+        date_to=date_to
+    )
+    return results
+
+
+async def sync_chat_history_by_date_range(
+    chat_id: int,
+    date_from: Optional[datetime] = None,
+    date_to: Optional[datetime] = None,
+    limit: Optional[int] = None
+) -> Tuple[int, int]:
+    """
+    在指定的时间范围内同步聊天历史消息
+    
+    此函数是一个便捷包装器，用于按日期范围获取历史消息
+    
+    Args:
+        chat_id: 聊天ID
+        date_from: 开始日期
+        date_to: 结束日期
+        limit: 最大消息数量，None表示不限制
         
-    return await syncer.initial_sync_all_whitelisted_chats(limit_per_chat)
+    Returns:
+        Tuple[int, int]: (处理的消息数量, 成功索引的消息数量)
+    """
+    # 创建同步器实例
+    syncer = HistorySyncer()
+    
+    # 调用基础函数，禁用增量同步，使用日期范围
+    return await syncer.sync_chat_history(
+        chat_id=chat_id,
+        limit=limit,
+        date_from=date_from,
+        date_to=date_to,
+        incremental=False  # 禁用增量同步，仅按日期同步
+    )

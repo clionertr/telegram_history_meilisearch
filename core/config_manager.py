@@ -5,13 +5,16 @@
 1. 从.env文件加载环境变量
 2. 从config.ini文件加载配置项
 3. 管理白名单（添加、移除、获取）
+4. 管理聊天同步点信息
 """
 
 import os
 import json
 import logging
+import time
+from datetime import datetime
 from pathlib import Path
-from typing import Dict, List, Any, Optional, Union
+from typing import Dict, List, Any, Optional, Union, Tuple
 from configparser import ConfigParser
 import dotenv
 
@@ -317,3 +320,143 @@ class ConfigManager:
             ID是否在白名单中
         """
         return chat_id in self.whitelist
+
+
+class SyncPointManager:
+    """
+    同步点管理器类
+    
+    负责管理和持久化聊天的同步点信息，包括：
+    1. 加载同步点信息
+    2. 获取特定聊天的同步点
+    3. 更新同步点信息
+    """
+    
+    def __init__(self, sync_points_path: str = "sync_points.json") -> None:
+        """
+        初始化同步点管理器
+        
+        Args:
+            sync_points_path: 同步点文件的路径，默认为项目根目录下的sync_points.json
+        """
+        self.logger = logging.getLogger(__name__)
+        self.sync_points_path = sync_points_path
+        self.sync_points: Dict[str, Dict[str, Any]] = {}
+        
+        # 加载同步点信息
+        self.load_sync_points()
+        
+    def load_sync_points(self) -> None:
+        """
+        从文件加载同步点信息
+        
+        如果文件不存在，会初始化为空字典
+        """
+        if os.path.exists(self.sync_points_path):
+            try:
+                with open(self.sync_points_path, "r", encoding="utf-8") as f:
+                    data = json.load(f)
+                    if isinstance(data, dict) and "sync_points" in data:
+                        self.sync_points = data["sync_points"]
+                    else:
+                        self.sync_points = {}
+                        self.logger.warning(f"同步点文件 {self.sync_points_path} 格式错误，已初始化为空")
+                self.logger.info(f"从 {self.sync_points_path} 加载同步点信息，共 {len(self.sync_points)} 个聊天")
+            except Exception as e:
+                self.sync_points = {}
+                self.logger.error(f"加载同步点文件 {self.sync_points_path} 时出错: {e}")
+        else:
+            self.sync_points = {}
+            self.logger.info(f"{self.sync_points_path} 文件不存在，已初始化为空")
+            
+    def save_sync_points(self) -> None:
+        """
+        保存同步点信息到文件
+        """
+        data = {
+            "sync_points": self.sync_points,
+            "updated_at": int(time.time())
+        }
+        
+        with open(self.sync_points_path, "w", encoding="utf-8") as f:
+            json.dump(data, f, indent=4, ensure_ascii=False)
+            
+        self.logger.info(f"已保存同步点信息到 {self.sync_points_path}，共 {len(self.sync_points)} 个聊天")
+        
+    def get_sync_point(self, chat_id: int) -> Optional[Dict[str, Any]]:
+        """
+        获取特定聊天的同步点信息
+        
+        Args:
+            chat_id: 聊天ID
+            
+        Returns:
+            同步点信息字典，包含message_id、date等，如不存在则返回None
+        """
+        chat_id_str = str(chat_id)  # JSON中的键必须是字符串
+        return self.sync_points.get(chat_id_str)
+        
+    def update_sync_point(self, chat_id: int, message_id: int, date: Union[datetime, int], additional_info: Optional[Dict[str, Any]] = None) -> None:
+        """
+        更新特定聊天的同步点信息
+        
+        Args:
+            chat_id: 聊天ID
+            message_id: 消息ID
+            date: 消息日期（datetime对象或时间戳）
+            additional_info: 其他额外信息，可选
+        """
+        chat_id_str = str(chat_id)  # JSON中的键必须是字符串
+        
+        # 转换date为时间戳
+        if isinstance(date, datetime):
+            date_timestamp = int(date.timestamp())
+        else:
+            date_timestamp = date
+            
+        # 创建同步点信息
+        sync_point = {
+            "message_id": message_id,
+            "date": date_timestamp,
+            "updated_at": int(time.time())
+        }
+        
+        # 添加额外信息
+        if additional_info and isinstance(additional_info, dict):
+            sync_point.update(additional_info)
+            
+        # 更新同步点
+        self.sync_points[chat_id_str] = sync_point
+        
+        # 保存到文件
+        self.save_sync_points()
+        
+        self.logger.debug(f"更新聊天 {chat_id} 的同步点: message_id={message_id}, date={date_timestamp}")
+        
+    def delete_sync_point(self, chat_id: int) -> bool:
+        """
+        删除特定聊天的同步点信息
+        
+        Args:
+            chat_id: 聊天ID
+            
+        Returns:
+            是否成功删除（如不存在则返回False）
+        """
+        chat_id_str = str(chat_id)
+        if chat_id_str not in self.sync_points:
+            self.logger.info(f"聊天 {chat_id} 的同步点不存在，无需删除")
+            return False
+            
+        del self.sync_points[chat_id_str]
+        self.save_sync_points()
+        self.logger.info(f"已删除聊天 {chat_id} 的同步点")
+        return True
+        
+    def reset_all_sync_points(self) -> None:
+        """
+        重置所有同步点信息
+        """
+        self.sync_points = {}
+        self.save_sync_points()
+        self.logger.info("已重置所有同步点信息")
