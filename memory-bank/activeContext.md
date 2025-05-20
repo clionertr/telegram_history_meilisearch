@@ -1,168 +1,154 @@
-# NexusCore 子任务日志 - 阶段 2，任务 2 (API 服务 (`api/`) 开发 (FastAPI))
+# NexusCore Orchestration Log
 
-此文件将由 Code Mode 子任务用于记录其在执行 FastAPI 服务开发过程中的详细思考、步骤、执行的命令、遇到的问题及解决方案。
+## Task: 阶段 2, 任务 3: 前端核心组件开发
 
-## 1. 任务概述与准备工作
+**Objective:** 根据项目计划 [`memory-bank/PLAN.md`](memory-bank/PLAN.md:150) (阶段 2, 任务 3)，开发前端核心 UI 组件，包括搜索服务、搜索栏、结果列表、结果项、主搜索页面，并使用 Zustand 进行状态管理。
 
-**任务目标**：开发 API 服务 (`api/`) 以支持前端与后端的交互，特别是实现 `/api/v1/search` POST 端点。
+**Orchestrator (NexusCore) Notes:**
+*   Delegating this task to "Code" mode.
+*   Provided "Code" mode with context from:
+    *   User's request.
+    *   [`memory-bank/PLAN.md`](memory-bank/PLAN.md:0) (specifically lines 150-159 for this task).
+    *   [`api/README.md`](api/README.md:0) (for API endpoint details).
+    *   [`FOLLOWME.md`](FOLLOWME.md:0) (for overall project requirements).
+*   Instructed "Code" mode to log its detailed process in this file (`memory-bank/activeContext.md`).
 
-**参考资料**：
-- PLAN.md 中的阶段 2，任务 2 描述
-- FOLLOWME.md 4.4 节中的 API 端点设计
+---
 
-**当前状态**：
-- API 目录结构骨架已存在 (`api/`, `api/routers/`)
-- 文件已创建但内容为空 (`api/main.py`, `api/routers/search.py`, `api/dependencies.py`)
-- 主文件 `main.py` 已实现 Telethon 客户端的异步运行，需要集成 FastAPI
+# Code Mode - Detailed Work Log (Task: 前端核心组件开发)
 
-**技术栈**：
-- FastAPI 作为 API 框架
-- Pydantic 用于数据验证和序列化
-- core/meilisearch_service.py 提供搜索功能
+(Code mode will start logging its work below this line)
 
-## 2. 实现计划
+## 工作计划
 
-1. 实现 `api/main.py` - FastAPI 应用程序入口
-2. 实现 `api/routers/search.py` - 搜索 API 路由
-3. 创建请求和响应模型
-4. 配置 CORS
-5. 更新项目主 `main.py` 文件，集成 FastAPI 应用
-6. 编写集成测试
+根据项目计划阶段2，任务3的要求，我将完成以下工作：
 
-## 3. 开发过程
+1. 开发前端API服务 (`frontend/src/services/api.js`)
+2. 创建Zustand状态管理 (`frontend/src/store/searchStore.js`)
+3. 开发React核心组件：
+   - SearchBar.jsx
+   - ResultItem.jsx
+   - ResultsList.jsx
+   - SearchPage.jsx
+4. 更新App.jsx以集成SearchPage
 
-### 3.1 实现 API 主入口 (api/main.py)
+## 1. 创建API服务
 
-已创建 `api/main.py` 文件，这是 FastAPI 应用的主入口点。该文件包含以下功能：
+开始实现`frontend/src/services/api.js`文件，用于封装与后端API的通信。
 
-- 创建 FastAPI 应用实例，配置了标题、描述、版本和文档 URL
-- 配置 CORS 中间件，允许来自前端开发服务器（localhost:5173, localhost:3000）的请求
-- 注册路由器，将 search 路由挂载到 `/api/v1` 前缀下
-- 定义启动和关闭事件
-- 提供应用实例工厂函数 `create_app()`
+已创建`frontend/src/services/api.js`文件，该文件封装了调用后端`/api/v1/search`端点的函数：
+- 实现了`searchMessages`函数，接收搜索关键词、过滤条件、页码和每页结果数量
+- 处理了API请求成功和失败的情况
+- 使用环境变量`VITE_API_BASE_URL`获取API基础URL，默认为`http://localhost:8000`
 
-### 3.2 实现搜索路由 (api/routers/search.py)
+## 2. 创建Zustand状态管理
 
-已创建 `api/routers/search.py` 文件，实现了搜索 API 的路由和处理逻辑。该文件包含以下功能：
+开始实现`frontend/src/store/searchStore.js`文件，用于状态管理。
 
-- 定义 Pydantic 数据模型：
-  - `SearchFilters`：过滤条件模型，包含 chat_type、date_from、date_to
-  - `SearchRequest`：搜索请求模型，包含 query、filters、page、hits_per_page
-  - `SearchResultItem`：搜索结果项模型
-  - `SearchResponse`：搜索响应模型
+已创建`frontend/src/store/searchStore.js`文件，使用Zustand管理搜索相关的状态：
+- 基础状态：`query`(搜索关键词)、`results`(搜索结果)、`isLoading`(加载状态)、`error`(错误信息)
+- 分页信息：`pagination` 对象，包含当前页码、总页数、总结果数、每页结果数
+- 筛选条件：`filters` 对象，包含聊天类型、开始日期、结束日期
+- 状态更新Action：
+  - `setQuery`：设置搜索关键词
+  - `setFilters`：设置筛选条件
+  - `setPage`：设置当前页码
+  - `setHitsPerPage`：设置每页结果数
+  - `clearResults`：清空搜索结果
+  - `fetchResults`：执行搜索，调用API服务的`searchMessages`函数
 
-- 创建 API 路由器，定义 POST `/search` 端点
-- 实现 `search_messages` 函数，它：
-  - 接收搜索请求
-  - 构建 Meilisearch 过滤条件字符串
-  - 调用 `MeilisearchService.search()` 执行搜索
-  - 处理并格式化搜索结果
-  - 返回符合 `SearchResponse` 模型的响应
+## 3. 开发React组件
 
-### 3.3 实现依赖注入 (api/dependencies.py)
+### 3.1 创建SearchBar组件
 
-已创建 `api/dependencies.py` 文件，提供 FastAPI 依赖注入功能。该文件包含：
+开始实现`frontend/src/components/SearchBar.jsx`组件，用于搜索输入框和提交按钮。
 
-- `get_meilisearch_service` 函数，使用 lru_cache 装饰器实现单例模式
-- 从环境变量获取 Meilisearch 配置
-- 创建并返回配置好的 MeilisearchService 实例
+已创建`frontend/src/components/SearchBar.jsx`组件：
+- 使用Zustand store中的query状态，并能通过setQuery更新
+- 表单提交时触发fetchResults方法执行搜索
+- 根据Telegram环境的不同提供不同的UI体验：
+  - 在普通网页环境中显示搜索按钮
+  - 在Telegram Mini App环境中，提示用户使用Telegram的MainButton
 
-### 3.4 集成 FastAPI 到主程序 (main.py)
+### 3.2 创建ResultItem组件
 
-修改了项目主程序入口 `main.py` 文件，将 FastAPI 应用集成到现有的 Telethon 客户端中：
+开始实现`frontend/src/components/ResultItem.jsx`组件，用于展示单条搜索结果。
 
-- 导入 FastAPI 应用和 uvicorn 服务器
-- 添加 FastAPI 服务器全局变量
-- 在 `shutdown_clients()` 函数中添加关闭 FastAPI 服务器的逻辑
-- 在 `async_main()` 函数中：
-  - 配置 uvicorn 服务器（主机、端口等）
-  - 创建 FastAPI 任务，并添加到任务列表
-  - 在 asyncio.gather 中包含 FastAPI 任务
+已创建`frontend/src/components/ResultItem.jsx`组件：
+- 展示单条搜索结果的详细信息：
+  - 聊天标题
+  - 发送者名称
+  - 发送时间（格式化的日期）
+  - 消息内容摘要
+  - 原始消息链接（可点击）
+- 使用Tailwind CSS进行样式设计，支持亮色/暗色模式
 
-### 3.5 创建 API 测试 (tests/integration/test_search_api.py)
+### 3.3 创建ResultsList组件
 
-已创建 `tests/integration/test_search_api.py` 文件，包含以下测试用例：
+开始实现`frontend/src/components/ResultsList.jsx`组件，用于展示搜索结果列表。
 
-1. `test_search_api_simple`：测试基本搜索功能
-2. `test_search_api_with_filters`：测试带有过滤条件的搜索功能
-3. `test_search_api_invalid_request`：测试无效请求的处理
-4. `test_search_api_pagination`：测试分页功能
+已创建`frontend/src/components/ResultsList.jsx`组件：
+- 使用Zustand store中的results状态显示搜索结果
+- 使用ResultItem组件渲染每条搜索结果
+- 根据不同状态显示不同内容：
+  - 加载中：显示加载动画
+  - 错误：显示错误信息
+  - 无结果：显示无结果提示
+  - 有结果：显示结果列表并展示分页信息
+- 实现分页功能：
+  - 显示当前页/总页数
+  - 提供"上一页"、"下一页"按钮
+  - 点击分页按钮时更新页码并重新获取数据
 
-## 4. 总结与下一步
+### 3.4 创建SearchPage组件
 
-### 4.1 已完成工作
+开始实现`frontend/src/pages/SearchPage.jsx`组件，作为主要的搜索界面，组合SearchBar和ResultsList。
 
-- ✅ 实现了 FastAPI 应用程序入口 (api/main.py)
-- ✅ 实现了搜索 API 路由 (api/routers/search.py)
-- ✅ 创建了请求和响应模型
-- ✅ 配置了 CORS
-- ✅ 更新了项目主 main.py 文件，集成 FastAPI 应用
-- ✅ 编写了集成测试
+已创建`frontend/src/pages/SearchPage.jsx`组件：
+- 组合了SearchBar和ResultsList组件
+- 管理Telegram Mini App的MainButton:
+  - 根据查询状态显示/隐藏MainButton
+  - 设置MainButton的点击事件来触发搜索
+  - 在组件卸载时清理事件监听器
+- 提供了简洁的页面标题和说明
 
-### 3.6 实现白名单管理 API (api/routers/whitelist.py)
+### 3.5 更新App.jsx
 
-根据用户反馈，已创建 `api/routers/whitelist.py` 文件，实现了白名单管理 API 的路由和处理逻辑。该文件包含以下功能：
+开始更新`frontend/src/App.jsx`文件，将SearchPage作为主要展示页面。
 
-- 定义 Pydantic 数据模型：
-  - `WhitelistEntry`：白名单项模型
-  - `WhitelistResponse`：白名单响应模型
-  - `WhitelistAddRequest`：添加白名单请求模型
-  - `WhitelistActionResponse`：白名单操作响应模型
+已更新`frontend/src/App.jsx`文件：
+- 移除了原始的测试内容和示例代码
+- 保留并优化了Telegram Mini App SDK初始化逻辑
+- 导入并使用SearchPage组件作为主要展示页面
+- 添加了展开视图的功能，以便在Telegram客户端中获得更好的显示效果
+- 保留了用户信息显示，但采用了更简洁的样式
 
-- 创建 API 路由器，定义以下端点：
-  - `GET /api/v1/admin/whitelist`：获取白名单列表
-  - `POST /api/v1/admin/whitelist`：添加 ID 到白名单
-  - `DELETE /api/v1/admin/whitelist/{chat_id}`：从白名单移除指定 ID
-  - `DELETE /api/v1/admin/whitelist`：重置白名单
+## 4. 任务完成总结
 
-- 实现相应的处理函数，调用 `ConfigManager` 的方法执行白名单操作
+前端核心UI组件开发任务已全部完成，包括：
 
-- 更新 `api/dependencies.py`，添加 `get_config_manager` 依赖注入函数
+1. **API服务**:
+   - 创建了`frontend/src/services/api.js`，封装了与后端`/api/v1/search`端点通信的函数
+   - 处理了请求和响应格式，包括错误处理
 
-- 更新 `api/main.py`，注册白名单路由器
+2. **Zustand状态管理**:
+   - 创建了`frontend/src/store/searchStore.js`，管理搜索相关状态
+   - 实现了所需的状态和actions：query、results、isLoading、error、pagination、filters等
+   - 提供了易用的API：setQuery、setFilters、setPage、fetchResults、clearResults等
 
-- 创建 `tests/integration/test_whitelist_api.py` 文件，包含以下测试用例：
-  - `test_get_whitelist`：测试获取白名单列表
-  - `test_add_to_whitelist`：测试添加 ID 到白名单
-  - `test_remove_from_whitelist`：测试从白名单移除 ID
-  - `test_reset_whitelist`：测试重置白名单
-  - `test_whitelist_workflow`：测试完整的白名单工作流
+3. **React组件**:
+   - `SearchBar.jsx`: 搜索输入框和提交按钮，与Zustand store同步
+   - `ResultItem.jsx`: 展示单条搜索结果，包括消息摘要、发送者、聊天标题、发送时间及原始消息链接
+   - `ResultsList.jsx`: 展示搜索结果列表，处理不同状态（加载中、无结果、错误）和分页逻辑
+   - `SearchPage.jsx`: 组合SearchBar和ResultsList，管理Telegram Mini App的MainButton
+   - 更新了`App.jsx`以集成SearchPage和Telegram Mini App SDK
 
-### 4.2 下一步建议
+所有组件均使用了Tailwind CSS进行样式设计，并提供了良好的亮色/暗色模式支持。用户界面简洁直观，易于使用。
 
-1. 运行和测试 API：
-   - 启动完整应用，确认 FastAPI 服务器能与 Telethon 客户端共存
-   - 使用 Swagger UI 手动测试 API (`http://localhost:8000/api/docs`)
-   - 运行集成测试验证功能
+项目现在具备了搜索Telegram历史消息的完整功能，用户可以：
+- 输入关键词进行搜索
+- 查看搜索结果列表
+- 分页浏览更多结果
+- 点击链接查看原始消息
 
-2. 前端与 API 集成：
-   - 确保前端服务能正确调用 API 端点
-   - 测试不同过滤条件和搜索参数
-
-3. 可能的扩展：
-   - 添加身份验证机制保护白名单管理 API
-   - 增加更多高级搜索功能
-   - 添加缓存机制提高 API 性能
-
-### 3.7 添加 API 使用文档 (api/README.md)
-
-根据用户需求，创建了 `api/README.md` 文件，提供了 API 服务的详细使用说明。此文档包含：
-
-- API 服务概述和文档访问方式
-- 搜索 API 的详细描述：
-  - 端点信息
-  - 请求参数格式和说明
-  - 响应格式
-  - 使用示例 (curl, JavaScript, Python)
-
-- 白名单管理 API 的详细描述：
-  - 获取、添加、移除和重置白名单的端点信息
-  - 请求和响应格式
-  - 使用示例
-
-- 使用建议：
-  - 前端集成方法
-  - 错误处理建议
-  - 分页处理
-  - 安全性考虑
-  - CORS 配置说明
+接下来可以进行实际测试和后续优化工作。
