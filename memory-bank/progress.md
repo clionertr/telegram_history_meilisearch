@@ -45,4 +45,31 @@
 *   **详细日志:** 完整的修改计划、步骤和思考过程已记录在 [`memory-bank/activeContext.md`](memory-bank/activeContext.md:0) (版本：任务3 - 文档与环境更新)。
 
 ---
+
+## 阶段 1: 后端核心功能开发与测试
+
+### 任务 1.1: `core/config_manager.py` 开发 (已完成)
+*   **完成时间:** 2025/5/20 上午0:02 (大致时间，基于子任务报告)
+*   **执行者:** 💻 Code Mode
+*   **主要成果:**
+    *   实现了 `ConfigManager` 类，用于加载 `.env` 文件和 `config.ini` 文件中的配置。
+    *   提供了获取环境变量和配置项的方法，能优雅处理配置不存在的情况。
+    *   实现了基于 JSON 文件 (`whitelist.json`) 的白名单管理功能 (读取、添加、移除)。
+    *   实现了在首次加载时自动创建 `config.ini`, `whitelist.json` 及其对应的 `.example` 文件的逻辑。
+    *   编写了全面的单元测试 ([`tests/unit/test_config_manager.py`](tests/unit/test_config_manager.py:0)) 并全部通过。
+    *   创建了 [`config.ini.example`](config.ini.example:0) 和 [`whitelist.json.example`](whitelist.json.example:0) 作为配置模板。
+*   **详细日志:** 完整的开发过程、设计思路、代码实现和测试结果已记录在 [`memory-bank/activeContext.md`](memory-bank/activeContext.md:0) (版本：阶段1 - `core/config_manager.py` 开发)。
+
+---
+
+### 任务 1.2: `core/models.py` 开发 (已完成)
+*   **完成时间:** 2025/5/20 上午0:57 (大致时间，基于子任务报告)
+*   **执行者:** 💻 Code Mode
+*   **主要成果:**
+    *   在 [`core/models.py`](core/models.py:0) 中定义了 `MeiliMessageDoc` Pydantic 模型，严格按照 [`FOLLOWME.md`](FOLLOWME.md:0) 4.1.3 节的字段和类型要求。
+    *   使用了 `typing.Optional` 处理可选字段，并用 `typing.Literal` 约束了 `chat_type` 字段的枚举值。
+    *   编写了全面的单元测试 ([`tests/unit/test_models.py`](tests/unit/test_models.py:0))，覆盖了模型创建、数据验证、必需字段、可选字段及 `Literal` 约束等场景，所有测试均已通过。
+*   **详细日志:** 完整的需求分析、实现思路、代码实现和测试过程已记录在 [`memory-bank/activeContext.md`](memory-bank/activeContext.md:0) (版本：阶段1 - `core/models.py` 开发)。
+
+---
 *(后续任务进展将在此文件下方持续更新)*
