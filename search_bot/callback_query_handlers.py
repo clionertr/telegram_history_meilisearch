@@ -123,11 +123,11 @@ class CallbackQueryHandlers:
             # 格式化搜索结果
             formatted_message, buttons = format_search_results(results, page, total_pages)
             
-            # 更新消息，使用纯文本模式
+            # 更新消息
             await event.edit(
                 formatted_message,
                 buttons=buttons,
-                parse_mode=None  # 使用纯文本模式，避免Markdown解析冲突
+                parse_mode='md'  # 启用 Markdown 解析
             )
             
             logger.info(f"已更新分页消息: 页码={page}/{total_pages}, 用户={user_id}")
@@ -140,7 +140,7 @@ class CallbackQueryHandlers:
                 # 如果无法通过 answer 显示错误，尝试编辑消息
                 try:
                     error_message = format_error_message(f"加载页面出错: {str(e)}")
-                    await event.edit(error_message, parse_mode=None)  # 使用纯文本模式
+                    await event.edit(error_message, parse_mode='md')  # 启用 Markdown 解析
                 except:
                     logger.error("无法通知用户错误信息")
     

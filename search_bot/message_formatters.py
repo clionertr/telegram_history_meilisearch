@@ -59,11 +59,11 @@ def format_search_results(
     total_hits = results.get('estimatedTotalHits', len(hits))
     processing_time = results.get('processingTimeMs', 0)
     
-    # 构建消息头部 (纯文本格式)
+    # 构建消息头部 (Markdown 格式)
     message_parts = [
-        f"🔍 搜索结果: \"{query}\"\n",
-        f"📊 找到约 {total_hits} 条匹配消息 (用时 {processing_time}ms)\n",
-        f"📄 第 {current_page}/{total_pages} 页\n\n"
+        f"🔍 搜索结果: \"**{query}**\"\n",
+        f"📊 找到约 **{total_hits}** 条匹配消息 (用时 **{processing_time}ms**)\n",
+        f"📄 第 **{current_page}/{total_pages}** 页\n\n"
     ]
     
     # 遍历结果，格式化每条消息
@@ -97,11 +97,15 @@ def format_search_results(
         safe_chat = chat_title or "未知聊天"
         safe_link = message_link or "#"  # 使用安全的默认链接
         
-        # 构建消息部分，使用纯文本格式（避免Markdown）
+        # 构建消息部分
+        # 添加分割线 (如果不是第一条消息且有多条消息)
+        if index > 1 and len(hits) > 1:
+            message_parts.append("─・─・─・─\n")
+
         message_parts.append(
-            f"{index}. {safe_sender} 在 {safe_chat} 中发表于 {date_str}\n"
+            f"{index}. **{safe_sender}** 在 **{safe_chat}** 中发表于 {date_str}\n"  # 发送者和聊天标题加粗
             f"{text_preview}\n"
-            f"👉 原消息: {safe_link}\n\n"
+            f"[👉 查看原消息]({safe_link})\n\n"  # Markdown 链接按钮
         )
     
     # 构建分页按钮 (如果需要)

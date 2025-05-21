@@ -209,7 +209,7 @@ class CommandHandlers:
                 f"发送 `/help` 获取更详细的使用说明和高级搜索语法。"
             )
             
-            await event.respond(welcome_message, parse_mode=None)
+            await event.respond(welcome_message, parse_mode='md') # 启用 Markdown
             logger.info(f"已发送欢迎消息给用户 {sender.id}")
             
         except Exception as e:
@@ -227,7 +227,7 @@ class CommandHandlers:
         """
         try:
             help_message = format_help_message()
-            await event.respond(help_message, parse_mode=None)
+            await event.respond(help_message, parse_mode='md') # 启用 Markdown
             logger.info(f"已发送帮助消息给用户 {(await event.get_sender()).id}")
             
         except Exception as e:
@@ -291,7 +291,7 @@ class CommandHandlers:
             # 对于直接搜索，我们可能需要编辑之前的 "正在搜索" 消息
             # 对于命令搜索，通常是新消息，所以直接 respond
             # 为了简化，我们统一使用 respond，Telethon 会处理好
-            await event.respond(formatted_message, buttons=buttons, parse_mode=None)
+            await event.respond(formatted_message, buttons=buttons, parse_mode='md') # 启用 Markdown
             logger.info(f"已向用户 {(await event.get_sender()).id} 发送搜索结果，共 {total_hits} 条")
 
             # TODO: （可选）如果 is_direct_search 为 True 且结果为空，可以发送提示信息
@@ -301,7 +301,7 @@ class CommandHandlers:
         except Exception as e:
             logger.error(f"执行搜索时出错 (query: {query}): {e}")
             error_message = format_error_message(str(e))
-            await event.respond(error_message, parse_mode=None)
+            await event.respond(error_message, parse_mode='md') # 启用 Markdown
 
     async def search_command(self, event) -> None:
         """
@@ -429,10 +429,10 @@ class CommandHandlers:
             success = self.config_manager.add_to_whitelist(chat_id)
             
             if success:
-                await event.respond(f"✅ 已成功将 chat_id `{chat_id}` 添加到白名单。")
+                await event.respond(f"✅ 已成功将 chat_id `{chat_id}` 添加到白名单。", parse_mode='md') # 启用 Markdown
                 logger.info(f"管理员 {(await event.get_sender()).id} 添加 {chat_id} 到白名单")
             else:
-                await event.respond(f"ℹ️ chat_id `{chat_id}` 已在白名单中，无需重复添加。")
+                await event.respond(f"ℹ️ chat_id `{chat_id}` 已在白名单中，无需重复添加。", parse_mode='md') # 启用 Markdown
             
         except Exception as e:
             logger.error(f"处理 /add_whitelist 命令时出错: {e}")
@@ -467,10 +467,10 @@ class CommandHandlers:
             success = self.config_manager.remove_from_whitelist(chat_id)
             
             if success:
-                await event.respond(f"✅ 已成功将 chat_id `{chat_id}` 从白名单移除。")
+                await event.respond(f"✅ 已成功将 chat_id `{chat_id}` 从白名单移除。", parse_mode='md') # 启用 Markdown
                 logger.info(f"管理员 {(await event.get_sender()).id} 从白名单移除 {chat_id}")
             else:
-                await event.respond(f"ℹ️ chat_id `{chat_id}` 不在白名单中，无需移除。")
+                await event.respond(f"ℹ️ chat_id `{chat_id}` 不在白名单中，无需移除。", parse_mode='md') # 启用 Markdown
             
         except Exception as e:
             logger.error(f"处理 /remove_whitelist 命令时出错: {e}")
@@ -506,8 +506,8 @@ class CommandHandlers:
 - `USER_PROXY_URL` - 代理服务器 URL（如需使用）
 
 ⚠️ 注意：修改配置后，需要使用 `/restart_userbot` 命令使配置生效。"""
-                await event.respond(help_text, parse_mode=None)
-                return
+            await event.respond(help_text, parse_mode='md') # 启用 Markdown
+            return
             
             key = match.group(1).upper()  # 转为大写
             if not match.group(2):
@@ -524,7 +524,7 @@ class CommandHandlers:
             self.config_manager.set_userbot_env(key, value)
             
             # 发送成功消息
-            await event.respond(f"✅ 已设置 User Bot 配置项 `{key}` = `{value if key != 'USER_API_HASH' else '******'}`\n\n使用 `/restart_userbot` 命令使配置生效。", parse_mode=None)
+            await event.respond(f"✅ 已设置 User Bot 配置项 `{key}` = `{value if key != 'USER_API_HASH' else '******'}`\n\n使用 `/restart_userbot` 命令使配置生效。", parse_mode='md') # 启用 Markdown
             logger.info(f"管理员 {(await event.get_sender()).id} 设置 User Bot 配置项 {key}")
             
         except Exception as e:
@@ -560,7 +560,7 @@ class CommandHandlers:
                 
             config_text += "\n使用 `/set_userbot_config <key> <value>` 修改配置，使用 `/restart_userbot` 使配置生效。"
             
-            await event.respond(config_text, parse_mode=None)
+            await event.respond(config_text, parse_mode='md') # 启用 Markdown
             logger.info(f"管理员 {(await event.get_sender()).id} 查看 User Bot 配置")
             
         except Exception as e:
