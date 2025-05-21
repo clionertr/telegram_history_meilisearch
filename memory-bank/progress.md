@@ -407,3 +407,15 @@
 *   **详细日志:** 详细的实现过程和设计考虑已记录在 [`memory-bank/activeContext.md`](memory-bank/activeContext.md:0) (版本：阶段 3 - 任务 1.3 Search Bot 默认搜索优化)。
 
 ---
+### 任务 3.1 (部分): 优化 Search Bot 搜索结果展示 (已完成)
+*   **完成时间:** 2025/5/21 下午3:14 (用户确认时间)
+*   **执行者:** 💻 Code Mode
+*   **主要成果:**
+    *   **添加分割线:** 在多条搜索结果之间插入了 `─・─・─・─` 分割线。
+    *   **Markdown 链接按钮:** 将“原消息”的文本链接修改为 Markdown 格式的按钮 `[👉 查看原消息](链接)`。
+    *   **文本加粗:** 对消息头部信息（如搜索关键词、结果数量）以及每条结果中的发送者和聊天标题进行了 Markdown 加粗处理。
+    *   **Markdown 解析启用:** 确保了在发送和编辑搜索结果消息时（[`search_bot/command_handlers.py`](search_bot/command_handlers.py:0), [`search_bot/callback_query_handlers.py`](search_bot/callback_query_handlers.py:0)）正确启用了 Markdown 解析模式。
+*   **涉及文件:** [`search_bot/message_formatters.py`](search_bot/message_formatters.py:0), [`search_bot/command_handlers.py`](search_bot/command_handlers.py:0), [`search_bot/callback_query_handlers.py`](search_bot/callback_query_handlers.py:0)。
+*   **详细日志:** 详细的实现过程和设计考虑已记录在 [`memory-bank/activeContext.md`](memory-bank/activeContext.md:0) (版本：阶段 3 - 任务 1.4 优化搜索结果展示)。
+
+---
