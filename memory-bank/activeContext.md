@@ -84,6 +84,7 @@
 3. 在 `search_bot/command_handlers.py` 中添加新的管理员命令
 4. 在 `main.py` 中实现 User Bot 重启机制
 5. 更新相关的测试用例
+6. **新增**: 更新 `/help` 命令输出和 `README.md` 文件，包含配置说明。
 
 ## 实现详情
 
@@ -127,14 +128,33 @@
 - 修改 `CommandHandlers` 类的初始化函数，接收并存储 `userbot_restart_event`
 - 在 `/restart_userbot` 命令中设置 `userbot_restart_event`，触发重启过程
 
+### 6. 异常处理修复
+
+针对用户报告的 `asyncio.exceptions.CancelledError` 导致程序崩溃的问题，进行了以下修复：
+- 在 `user_bot/client.py` 的 `run()` 方法中添加了对 `asyncio.CancelledError` 的捕获和处理。
+- 在 `main.py` 的 `restart_userbot_task()` 函数中添加了对外层 `asyncio.CancelledError` 的捕获和处理，确保监控任务自身被取消时能优雅退出。
+- 在 `main.py` 的 `async_main()` 函数中的 `asyncio.gather(*tasks.values())` 调用中添加了 `return_exceptions=True`，以防止一个任务的异常影响其他任务的执行和关闭。
+
+### 7. 更新文档
+
+- **`/help` 命令**: 修改了 `search_bot/message_formatters.py` 中的 `format_help_message()` 函数，添加了关于配置文件、User Bot 管理命令以及如何设置管理员的详细说明。
+- **`README.md`**: 在 `README.md` 文件中添加了一个新的 "配置说明" 部分，详细解释了各种配置文件的作用、加载优先级、管理员设置方法以及 User Bot 管理命令。
+
 ## 功能总结
 
 1. **User Bot 配置管理**
    - User Bot 的配置存储在单独的 `.env.userbot` 文件中
-   - 支持查看当前配置
-   - 支持修改配置
+   - 支持通过 Search Bot 的管理员命令查看当前配置
+   - 支持通过 Search Bot 的管理员命令修改配置
 
 2. **User Bot 重启机制**
-   - 手动重启：通过 `/restart_userbot` 命令触发
+   - 手动重启：通过 Search Bot 的 `/restart_userbot` 管理员命令触发
    - 安全停止当前任务：取消正在运行的任务，断开连接，重新加载配置
    - 重新创建并启动新的任务
+
+3. **文档完善**
+   - `/help` 命令现在提供更全面的配置和管理信息。
+   - `README.md` 包含详细的配置指南。
+
+4. **稳定性增强**
+   - 改进了异步任务的取消处理，防止程序因未捕获的 `CancelledError` 而崩溃。
