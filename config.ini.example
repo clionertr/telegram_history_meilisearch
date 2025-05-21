@@ -14,3 +14,11 @@ cache_dir = cache
 log_level = INFO
 # 其他常规配置项 = 
 
+[SearchBot]
+enable_search_cache = true
+search_cache_ttl_seconds = 7200
+search_cache_initial_fetch_count = 15
+# enable_search_cache = (boolean, default: true): 是否启用搜索结果缓存。
+# search_cache_ttl_seconds = (integer, default: 7200 (2 hours)): 缓存的过期时间（秒）。
+# search_cache_initial_fetch_count = (integer, default: 15): 首次快速获取并展示给用户的条目数。
+

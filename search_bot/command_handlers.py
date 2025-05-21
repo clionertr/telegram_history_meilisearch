@@ -10,6 +10,7 @@
 import logging
 import re
 import asyncio
+import time # Added for cache timestamping
 from typing import List, Optional, Union, Dict, Any, Tuple
 from datetime import datetime
 
@@ -18,6 +19,7 @@ from telethon.tl.types import User
 
 from core.meilisearch_service import MeiliSearchService
 from core.config_manager import ConfigManager
+from .cache_service import SearchCacheService # Added
 from search_bot.message_formatters import format_search_results, format_error_message, format_help_message
 
 # 配置日志记录器
@@ -54,11 +56,13 @@ class CommandHandlers:
         self.config_manager = config_manager
         self.admin_ids = admin_ids
         self.userbot_restart_event = userbot_restart_event
+        self.cache_service = SearchCacheService(config_manager)
+        self.active_full_fetches: Dict[str, asyncio.Task] = {} # For managing async full-fetch tasks
         
         # 注册命令处理函数
         self.register_handlers()
         
-        logger.info("命令处理器已初始化")
+        logger.info("命令处理器已初始化，搜索缓存服务已配置")
     
     def register_handlers(self) -> None:
         """
@@ -113,8 +117,22 @@ class CommandHandlers:
             self.handle_plain_text_message,
             events.NewMessage(func=self._is_plain_text_and_not_command)
         )
+
+        # Search Cache Admin Commands
+        self.client.add_event_handler(
+            self.view_search_config_command,
+            events.NewMessage(pattern=r"^/view_search_config$")
+        )
+        self.client.add_event_handler(
+            self.set_search_config_command,
+            events.NewMessage(pattern=r"^/set_search_config(?:\s+(\S+))?(?:\s+(.+))?$")
+        )
+        self.client.add_event_handler(
+            self.clear_search_cache_command,
+            events.NewMessage(pattern=r"^/clear_search_cache$")
+        )
         
-        logger.info("已注册所有命令处理函数，包括普通文本搜索处理器")
+        logger.info("已注册所有命令处理函数，包括普通文本搜索处理器和搜索缓存管理命令")
     
     def _is_plain_text_and_not_command(self, event) -> bool:
         """
@@ -143,7 +161,11 @@ class CommandHandlers:
             r"^/remove_whitelist(?:\s+(-?\d+))?$",
             r"^/set_userbot_config(?:\s+(\S+))?(?:\s+(.+))?$",
             r"^/view_userbot_config$",
-            r"^/restart_userbot$"
+            r"^/restart_userbot$",
+            # Add new search config commands to prevent them being treated as plain text
+            r"^/view_search_config$",
+            r"^/set_search_config(?:\s+(\S+))?(?:\s+(.+))?$",
+            r"^/clear_search_cache$"
         ]
         
         for pattern in known_commands_patterns:
@@ -233,75 +255,261 @@ class CommandHandlers:
         except Exception as e:
             logger.error(f"处理 /help 命令时出错: {e}")
             await event.respond("😕 获取帮助信息时出现错误，请稍后再试。")
-    
-    async def _perform_search(self, event, query: str, is_direct_search: bool = False) -> None:
+
+    async def _get_results_from_meili(self,
+                                      parsed_query: str,
+                                      filters: Optional[str],
+                                      sort: List[str],
+                                      page: int,
+                                      hits_per_page: int) -> Dict[str, Any]:
+        """Helper function to call MeiliSearch and return results."""
+        return self.meilisearch_service.search(
+            query=parsed_query,
+            filters=filters,
+            sort=sort,
+            page=page,
+            hits_per_page=hits_per_page
+        )
+
+    async def _fetch_all_results_async(self, cache_key: str, parsed_query: str, filters_dict: Optional[Dict[str, Any]], meili_filters: Optional[str], sort_options: List[str], total_hits_estimate: int):
         """
-        执行搜索操作并回复结果。
+        异步获取所有搜索结果并更新缓存。
+        """
+        try:
+            logger.info(f"后台任务开始: 为 key='{cache_key}' 获取全部 {total_hits_estimate} 条结果。")
+            # Fetch all results. MeiliSearch's limit parameter can be high.
+            # We assume meilisearch_service.search handles pagination if we ask for all hits.
+            # Let's fetch all in one go if total_hits_estimate is manageable, e.g., < 1000.
+            # Otherwise, we might need a loop here, but for now, try to get all.
+            # The MeiliSearch Python SDK's `search` method with `hits_per_page` set to total_hits
+            # should ideally return all results if the server limit allows.
+            # If total_hits_estimate is very large, this might be slow or hit server limits.
+            # For now, we'll request all items.
+            
+            # A more robust approach for very large result sets would be to fetch in chunks
+            # and append, but that complicates cache updates significantly.
+            # Let's assume total_hits_estimate is within a reasonable limit for a single fetch.
+            # The default limit for MeiliSearch is 1000 per query if not specified otherwise by `hitsPerPage`.
+            
+            all_results_data = []
+            # If total_hits_estimate is 0, no need to fetch
+            if total_hits_estimate == 0:
+                logger.info(f"后台任务: key='{cache_key}', 总命中数为0，无需获取。")
+                self.cache_service.update_cache_to_complete(parsed_query, filters_dict, [], 0)
+                return
+
+            # Fetch all results. The MeiliSearch client handles pagination internally if we set a high limit.
+            # We'll fetch all results in one go.
+            # The `search` method in MeiliSearchService already handles `page` and `hits_per_page`.
+            # To get all, we can set hits_per_page to total_hits and page to 1.
+            # However, MeiliSearch has a default limit (often 1000).
+            # For simplicity, we'll fetch up to a practical limit (e.g. 1000) for the "full" cache.
+            # If total_hits > 1000, the "full" cache will contain the first 1000.
+            # This is a pragmatic choice to avoid excessive memory/network for huge result sets.
+            # The user can still paginate through MeiliSearch directly via callbacks if needed beyond this.
+            
+            fetch_limit = min(total_hits_estimate, 1000) # Cap full fetch at 1000 for now
+
+            if fetch_limit > 0:
+                full_search_results_obj = await self._get_results_from_meili(
+                    parsed_query=parsed_query,
+                    filters=meili_filters,
+                    sort=sort_options,
+                    page=1, # Get all from the first page
+                    hits_per_page=fetch_limit # Request all (up to the cap)
+                )
+                all_results_data = full_search_results_obj.get('hits', [])
+            
+            self.cache_service.update_cache_to_complete(parsed_query, filters_dict, all_results_data, total_hits_estimate)
+            logger.info(f"后台任务完成: key='{cache_key}' 的缓存已更新为 {len(all_results_data)} 条完整结果 (总预估 {total_hits_estimate})。")
+
+        except Exception as e:
+            logger.error(f"后台任务失败: key='{cache_key}' 获取全部结果时出错: {e}", exc_info=True)
+            # Optionally, remove the partial cache entry or mark it as failed?
+            # For now, the partial entry will remain until TTL.
+        finally:
+            if cache_key in self.active_full_fetches:
+                del self.active_full_fetches[cache_key]
+
+    async def _perform_search(self, event, query: str, page: int = 1, is_direct_search: bool = False) -> None:
+        """
+        执行搜索操作并回复结果。集成了缓存逻辑。
         
         Args:
             event: Telethon 事件对象。
             query: 搜索关键词。
-            is_direct_search: 是否为直接无命令搜索 (用于未来可能的提示)。
+            page: 请求的页码 (用于分页)。
+            is_direct_search: 是否为直接无命令搜索。
         """
         try:
-            logger.info(f"用户 {(await event.get_sender()).id} 搜索: {query}")
-            
-            # 解析高级搜索语法
-            filters = None
+            sender_id = (await event.get_sender()).id
+            logger.info(f"用户 {sender_id} 搜索: '{query}', 页码: {page}")
+
             parsed_query, filters_dict = self._parse_advanced_syntax(query)
-            if filters_dict:
-                filters = self._build_meilisearch_filters(filters_dict)
-                logger.debug(f"解析后的过滤条件: {filters}")
+            meili_filters = self._build_meilisearch_filters(filters_dict) if filters_dict else None
             
-            # 执行搜索
-            # 首先发送一个 "正在搜索" 的提示消息
-            try:
-                # 尝试编辑消息，如果用户快速连续发送，可能会失败
-                # 但对于命令搜索，通常是新消息，所以直接 respond
-                if event.is_reply or is_direct_search: # 假设直接搜索可能需要编辑之前的 "正在处理"
-                     await event.edit("🔍 正在搜索，请稍候...")
-                else:
-                    await event.respond("🔍 正在搜索，请稍候...")
-            except Exception: # pylint: disable=broad-except
-                 # 如果编辑失败（例如消息太旧或权限问题），则发送新消息
-                await event.respond("🔍 正在搜索，请稍候...")
+            hits_per_page = 5  # Standard items per page for display
+            sort_options = ["date:desc"] # Default sort
 
-            # 默认参数
-            page = 1
-            hits_per_page = 5
-            sort = ["date:desc"]  # 默认按时间倒序
-            
-            # 调用 Meilisearch 搜索服务
-            results = self.meilisearch_service.search(
-                query=parsed_query,
-                filters=filters,
-                sort=sort,
-                page=page,
-                hits_per_page=hits_per_page
-            )
-            
-            # 计算总页数
-            total_hits = results.get('estimatedTotalHits', 0)
-            total_pages = (total_hits + hits_per_page - 1) // hits_per_page if total_hits > 0 else 0
-            
-            # 格式化搜索结果
-            formatted_message, buttons = format_search_results(results, page, total_pages)
-            
-            # 发送结果
-            # 对于直接搜索，我们可能需要编辑之前的 "正在搜索" 消息
-            # 对于命令搜索，通常是新消息，所以直接 respond
-            # 为了简化，我们统一使用 respond，Telethon 会处理好
-            await event.respond(formatted_message, buttons=buttons, parse_mode='md') # 启用 Markdown
-            logger.info(f"已向用户 {(await event.get_sender()).id} 发送搜索结果，共 {total_hits} 条")
+            cached_data_entry = None
+            if self.cache_service.is_cache_enabled():
+                cached_data_entry = self.cache_service.get_from_cache(parsed_query, filters_dict)
 
-            # TODO: （可选）如果 is_direct_search 为 True 且结果为空，可以发送提示信息
-            # if is_direct_search and total_hits == 0:
-            #     await event.respond("💡 你可以直接发送关键词进行搜索哦！如果需要帮助，请发送 /help。")
+            if cached_data_entry:
+                cached_results, is_partial, total_hits_from_cache, fetch_ts = cached_data_entry
+                logger.info(f"缓存命中 for query '{parsed_query}'. Partial: {is_partial}, Total Hits: {total_hits_from_cache}")
+
+                if not is_partial: # Full data in cache
+                    results_to_format = {
+                        'hits': cached_results[ (page - 1) * hits_per_page : page * hits_per_page ],
+                        'query': parsed_query,
+                        'processingTimeMs': 0, # From cache
+                        'estimatedTotalHits': total_hits_from_cache
+                    }
+                    total_pages = (total_hits_from_cache + hits_per_page - 1) // hits_per_page if total_hits_from_cache > 0 else 0
+                    formatted_message, buttons = format_search_results(results_to_format, page, total_pages, query_original=query)
+                    await event.respond(formatted_message, buttons=buttons, parse_mode='md')
+                    logger.info(f"已从完整缓存向用户 {sender_id} 发送第 {page} 页结果")
+                    return
+
+                # Partial data in cache
+                if total_hits_from_cache is not None:
+                    # Check if requested page is within the initial fetch
+                    if page * hits_per_page <= len(cached_results):
+                        results_to_format = {
+                            'hits': cached_results[ (page - 1) * hits_per_page : page * hits_per_page ],
+                            'query': parsed_query,
+                            'processingTimeMs': 0, # From cache
+                            'estimatedTotalHits': total_hits_from_cache
+                        }
+                        total_pages = (total_hits_from_cache + hits_per_page - 1) // hits_per_page if total_hits_from_cache > 0 else 0
+                        formatted_message, buttons = format_search_results(results_to_format, page, total_pages, query_original=query)
+                        await event.respond(formatted_message, buttons=buttons, parse_mode='md')
+                        logger.info(f"已从部分缓存 (初始获取部分) 向用户 {sender_id} 发送第 {page} 页结果")
+                        return
+                    else:
+                        # Requested page is beyond initial fetch.
+                        # Check if full fetch is ongoing or completed.
+                        cache_key_for_async = self.cache_service._generate_cache_key(parsed_query, filters_dict) # pylint: disable=protected-access
+                        if cache_key_for_async in self.active_full_fetches or (fetch_ts is not None and time.time() - fetch_ts < 60): # Task running or recently started (give it 60s)
+                            # Chosen:方案A (提示用户等待) for pagination beyond initial while async fetch is running
+                            await event.respond("⏳ 正在加载更多结果，请稍候片刻再尝试翻页...", parse_mode='md')
+                            logger.info(f"用户 {sender_id} 请求的页面超出初始缓存，后台任务仍在进行中。")
+                            # Record this choice in activeContext.md
+                            # Decision: For pagination requests beyond the initial cached set, while a background
+                            # full-fetch task is active (or was very recently initiated), we will inform the user
+                            # that more results are loading and ask them to wait. This avoids hitting MeiliSearch
+                            # again for a page that will soon be part of the complete cache entry, and provides
+                            # a better UX than an immediate (potentially partial or inconsistent) result.
+                            # The alternative of fetching this specific page directly from MeiliSearch might lead
+                            # to this page not being part of the "all_results_data" when the background task completes,
+                            # or requiring complex merging logic.
+                            return
+                        else:
+                            # Full fetch might have completed and updated the cache, or failed/timed out.
+                            # Re-check cache, it might be complete now.
+                            fresh_cached_entry = self.cache_service.get_from_cache(parsed_query, filters_dict)
+                            if fresh_cached_entry and not fresh_cached_entry[1]: # is_partial is False
+                                cached_results_updated, _, total_hits_updated, _ = fresh_cached_entry
+                                results_to_format = {
+                                    'hits': cached_results_updated[ (page - 1) * hits_per_page : page * hits_per_page ],
+                                    'query': parsed_query,
+                                    'processingTimeMs': 0,
+                                    'estimatedTotalHits': total_hits_updated
+                                }
+                                total_pages = (total_hits_updated + hits_per_page - 1) // hits_per_page if total_hits_updated > 0 else 0
+                                formatted_message, buttons = format_search_results(results_to_format, page, total_pages, query_original=query)
+                                await event.respond(formatted_message, buttons=buttons, parse_mode='md')
+                                logger.info(f"已从更新后的完整缓存向用户 {sender_id} 发送第 {page} 页结果")
+                                return
+                            # If still partial or not found, proceed to fetch from Meili (should ideally not happen if logic is correct)
+                            logger.warning(f"缓存状态异常 for {parsed_query} after async check, proceeding to MeiliSearch for page {page}")
+
+
+            # Cache miss or only partial data that doesn't cover the page and async fetch not active/helpful
+            # This part is primarily for the first time a search is made (page=1)
+            if page == 1: # Only do initial + async fetch on the first page request
+                status_message = await event.respond("🔍 正在搜索，请稍候...", parse_mode='md')
+                
+                initial_fetch_count = self.cache_service.get_initial_fetch_count()
+                
+                # Stage 1: Initial Fetch
+                initial_results_obj = await self._get_results_from_meili(
+                    parsed_query, meili_filters, sort_options, 1, initial_fetch_count
+                )
+                initial_hits_data = initial_results_obj.get('hits', [])
+                estimated_total_hits = initial_results_obj.get('estimatedTotalHits', 0)
+
+                # Store initial results in cache
+                full_fetch_ts = None
+                if self.cache_service.is_cache_enabled():
+                    if estimated_total_hits > len(initial_hits_data):
+                        full_fetch_ts = time.time() # Mark time if async fetch will be needed
+                    self.cache_service.store_in_cache(
+                        parsed_query, filters_dict, initial_hits_data, estimated_total_hits,
+                        is_partial=(estimated_total_hits > len(initial_hits_data)),
+                        full_fetch_initiated_timestamp=full_fetch_ts
+                    )
+
+                # Format and send initial results
+                total_pages_for_initial = (estimated_total_hits + hits_per_page - 1) // hits_per_page if estimated_total_hits > 0 else 0
+                formatted_message, buttons = format_search_results(initial_results_obj, 1, total_pages_for_initial, query_original=query)
+                
+                try:
+                    await status_message.edit(formatted_message, buttons=buttons, parse_mode='md')
+                except Exception: # If edit fails (e.g. message too old)
+                    await event.respond(formatted_message, buttons=buttons, parse_mode='md')
+                logger.info(f"已向用户 {sender_id} 发送初始 {len(initial_hits_data)} 条搜索结果 (总共 {estimated_total_hits} 条)")
+
+                # Stage 2: Asynchronous Full Fetch (if needed)
+                if self.cache_service.is_cache_enabled() and estimated_total_hits > len(initial_hits_data):
+                    cache_key_for_async = self.cache_service._generate_cache_key(parsed_query, filters_dict) # pylint: disable=protected-access
+                    if cache_key_for_async not in self.active_full_fetches:
+                        logger.info(f"启动后台任务: 为 key='{cache_key_for_async}' 获取剩余结果。")
+                        task = asyncio.create_task(
+                            self._fetch_all_results_async(
+                                cache_key_for_async, parsed_query, filters_dict, meili_filters, sort_options, estimated_total_hits
+                            )
+                        )
+                        self.active_full_fetches[cache_key_for_async] = task
+                    else:
+                        logger.info(f"后台任务已在运行: key='{cache_key_for_async}'")
+                return # Initial results sent, async fetch (if any) started.
+
+            else: # page > 1 and data not sufficiently in cache
+                # This case means user is asking for a subsequent page,
+                # but the cache (even after checking for async completion) doesn't have it.
+                # This might happen if TTL expired, or cache was cleared, or async failed silently.
+                # For robustness, fetch this specific page directly from MeiliSearch.
+                # This page won't be part of the "full_fetch" logic if it runs later for the same query.
+                logger.warning(f"缓存未命中或数据不足 (页码 {page}) for '{parsed_query}'. 直接从 MeiliSearch 获取。")
+                status_message = await event.respond(f"🔍 正在加载第 {page} 页，请稍候...", parse_mode='md')
+                
+                page_specific_results_obj = await self._get_results_from_meili(
+                    parsed_query, meili_filters, sort_options, page, hits_per_page
+                )
+                estimated_total_hits = page_specific_results_obj.get('estimatedTotalHits', 0) # Re-confirm total
+                total_pages = (estimated_total_hits + hits_per_page - 1) // hits_per_page if estimated_total_hits > 0 else 0
+                
+                formatted_message, buttons = format_search_results(page_specific_results_obj, page, total_pages, query_original=query)
+                try:
+                    await status_message.edit(formatted_message, buttons=buttons, parse_mode='md')
+                except Exception:
+                    await event.respond(formatted_message, buttons=buttons, parse_mode='md')
+                logger.info(f"已直接从 MeiliSearch 向用户 {sender_id} 发送第 {page} 页结果")
+                return
 
         except Exception as e:
-            logger.error(f"执行搜索时出错 (query: {query}): {e}")
+            logger.error(f"执行搜索时出错 (query: {query}, page: {page}): {e}", exc_info=True)
             error_message = format_error_message(str(e))
-            await event.respond(error_message, parse_mode='md') # 启用 Markdown
+            # Try to edit if status_message exists, otherwise respond
+            try:
+                if 'status_message' in locals() and status_message:
+                    await status_message.edit(error_message, parse_mode='md')
+                else:
+                    await event.respond(error_message, parse_mode='md')
+            except Exception:
+                 await event.respond(error_message, parse_mode='md')
 
     async def search_command(self, event) -> None:
         """
@@ -320,7 +528,8 @@ class CommandHandlers:
             return
         
         query = match.group(1).strip()
-        await self._perform_search(event, query)
+        # For /search command, it's always the first page initially
+        await self._perform_search(event, query, page=1)
     
     def _parse_advanced_syntax(self, query: str) -> Tuple[str, Dict[str, Any]]:
         """
@@ -605,6 +814,130 @@ class CommandHandlers:
             logger.error(f"处理 /restart_userbot 命令时出错: {e}")
             await event.respond(f"⚠️ 重启 User Bot 时出现错误: {str(e)}")
 
+    async def view_search_config_command(self, event) -> None:
+        """处理 /view_search_config 命令 (管理员权限)"""
+        if not await self.is_admin(event):
+            await event.respond("⚠️ 此命令需要管理员权限。")
+            return
+        try:
+            config_text = "🔍 **搜索缓存配置**\n\n"
+            config_text += f"- 启用缓存: `{self.config_manager.get_search_cache_enabled()}`\n"
+            config_text += f"- 缓存TTL (秒): `{self.config_manager.get_search_cache_ttl()}`\n"
+            config_text += f"- 初始获取条目数: `{self.config_manager.get_search_cache_initial_fetch_count()}`\n\n"
+            
+            cache_stats = self.cache_service.get_cache_stats()
+            if cache_stats.get("enabled"):
+                config_text += "**缓存状态:**\n"
+                config_text += f"- 当前条目数: `{cache_stats.get('currsize', 'N/A')}`\n"
+                config_text += f"- 最大条目数: `{cache_stats.get('maxsize', 'N/A')}`\n"
+            else:
+                config_text += "**缓存状态:** `已禁用`\n"
+            
+            await event.respond(config_text, parse_mode='md')
+            logger.info(f"管理员 {(await event.get_sender()).id} 查看搜索缓存配置")
+        except Exception as e:
+            logger.error(f"处理 /view_search_config 命令时出错: {e}")
+            await event.respond(f"⚠️ 查看搜索缓存配置时出现错误: {str(e)}")
+
+    async def set_search_config_command(self, event) -> None:
+        """处理 /set_search_config 命令 (管理员权限)"""
+        if not await self.is_admin(event):
+            await event.respond("⚠️ 此命令需要管理员权限。")
+            return
+
+        message_text = event.message.text
+        match = re.match(r"^/set_search_config(?:\s+(\S+))?(?:\s+(.+))?$", message_text)
+
+        if not match or not match.group(1) or not match.group(2):
+            help_text = """请提供配置项和值，例如：
+`/set_search_config enable_search_cache true`
+
+可设置的配置项:
+- `enable_search_cache` (true/false)
+- `search_cache_ttl_seconds` (整数, 例如 3600)
+- `search_cache_initial_fetch_count` (整数, 例如 20)
+
+更改配置后，缓存将重新初始化。"""
+            await event.respond(help_text, parse_mode='md')
+            return
+
+        key = match.group(1).lower()
+        value_str = match.group(2).strip()
+        
+        valid_keys = {
+            "enable_search_cache": lambda v: v.lower() == 'true' or v.lower() == 'false',
+            "search_cache_ttl_seconds": lambda v: v.isdigit(),
+            "search_cache_initial_fetch_count": lambda v: v.isdigit()
+        }
+
+        if key not in valid_keys:
+            await event.respond(f"⚠️ 无效的配置项: `{key}`。请从允许的列表中选择。")
+            return
+
+        try:
+            processed_value: Union[bool, int, str]
+            if key == "enable_search_cache":
+                if value_str.lower() not in ['true', 'false']:
+                    raise ValueError("enable_search_cache 必须是 true 或 false")
+                processed_value = value_str.lower() == 'true'
+            elif key in ["search_cache_ttl_seconds", "search_cache_initial_fetch_count"]:
+                if not value_str.isdigit():
+                    raise ValueError(f"{key} 必须是一个整数")
+                processed_value = int(value_str)
+                if processed_value <= 0 and key != "search_cache_ttl_seconds": # TTL can be 0 for no expiry with maxsize
+                     if processed_value <=0 and key == "search_cache_ttl_seconds" and self.config_manager.config.getint("SearchBot", "search_cache_ttl_seconds", fallback=1) == 0 : # allow 0 if already 0 (no expiry)
+                         pass # allow 0 for TTL if it means no expiry based on cachetools
+                     elif key == "search_cache_initial_fetch_count" and processed_value <=0:
+                         raise ValueError(f"{key} 必须大于 0")
+
+            else: # Should not happen due to key check
+                await event.respond(f"⚠️ 未知的配置键: {key}")
+                return
+
+            # Update ConfigParser in memory
+            section = "SearchBot"
+            if not self.config_manager.config.has_section(section):
+                self.config_manager.config.add_section(section)
+            
+            self.config_manager.config.set(section, key, str(processed_value)) # Store as string in ini
+
+            # Save to config.ini
+            with open(self.config_manager.config_path, "w", encoding="utf-8") as f:
+                self.config_manager.config.write(f)
+            
+            # Reload config in ConfigManager instance
+            self.config_manager.load_config() # This re-reads the file into self.config
+            self.config_manager._load_search_bot_config() # This updates the specific attributes
+
+            # Re-initialize SearchCacheService with new config
+            # Pass the existing maxsize if it was set, or default. For now, use default.
+            current_maxsize = self.cache_service.get_cache_stats().get('maxsize', 200) if self.cache_service.is_cache_enabled() else 200
+
+            self.cache_service = SearchCacheService(self.config_manager, maxsize=current_maxsize)
+            self.active_full_fetches.clear() # Clear ongoing fetches
+
+            await event.respond(f"✅ 配置项 `{key}` 已更新为 `{processed_value}`。\n搜索缓存已使用新配置重新初始化。进行中的异步获取任务已清除。", parse_mode='md')
+            logger.info(f"管理员 {(await event.get_sender()).id} 更新搜索配置: {key} = {processed_value}")
+
+        except ValueError as ve:
+            await event.respond(f"⚠️ 值错误: {str(ve)}")
+        except Exception as e:
+            logger.error(f"处理 /set_search_config 命令时出错: {e}", exc_info=True)
+            await event.respond(f"⚠️ 更新搜索配置时出现严重错误: {str(e)}")
+
+    async def clear_search_cache_command(self, event) -> None:
+        """处理 /clear_search_cache 命令 (管理员权限)"""
+        if not await self.is_admin(event):
+            await event.respond("⚠️ 此命令需要管理员权限。")
+            return
+        try:
+            self.cache_service.clear_cache()
+            self.active_full_fetches.clear() # Clear any ongoing background fetch tasks
+            await event.respond("✅ 搜索缓存已清空，进行中的异步获取任务已清除。")
+            logger.info(f"管理员 {(await event.get_sender()).id} 清空了搜索缓存")
+        except Exception as e:
+            logger.error(f"处理 /clear_search_cache 命令时出错: {e}")
+            await event.respond(f"⚠️ 清空搜索缓存时出现错误: {str(e)}")
 
 # 辅助函数：创建命令处理器并注册到客户端
 def setup_command_handlers(

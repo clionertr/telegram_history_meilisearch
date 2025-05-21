@@ -1,6 +1,7 @@
 Telethon
-meilisearch-python
+meilisearch
 FastAPI
 python-dotenv
 Pydantic
 uvicorn
+cachetools

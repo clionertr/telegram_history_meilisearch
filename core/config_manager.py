@@ -70,6 +70,11 @@ class ConfigManager:
         self.userbot_env_vars: Dict[str, str] = {}
         self.config = ConfigParser()
         self.whitelist: List[int] = []
+
+        # Search Bot Cache Config - Defaults
+        self.enable_search_cache: bool = True
+        self.search_cache_ttl_seconds: int = 7200
+        self.search_cache_initial_fetch_count: int = 15
         
         # 加载配置
         self.load_env()
@@ -87,6 +92,7 @@ class ConfigManager:
         # 加载配置文件和白名单
         self.load_config()
         self.load_whitelist()
+        self._load_search_bot_config() # Load SearchBot specific configs
         
         # 创建示例文件
         self.create_example_files()
@@ -170,6 +176,12 @@ class ConfigManager:
             "# CACHE_DIR": "cache",
             "# LOG_LEVEL": "INFO"
         }
+
+        self.config["SearchBot"] = {
+            "enable_search_cache": "true",
+            "search_cache_ttl_seconds": "7200",
+            "search_cache_initial_fetch_count": "15"
+        }
         
         with open(self.config_path, "w", encoding="utf-8") as f:
             self.config.write(f)
@@ -241,6 +253,15 @@ USER_SESSION_NAME=user_bot_session
             "CACHE_DIR": "cache",
             "LOG_LEVEL": "INFO",
             "# 其他常规配置项": ""
+        }
+
+        example_config["SearchBot"] = {
+            "enable_search_cache": "true",
+            "search_cache_ttl_seconds": "7200",
+            "search_cache_initial_fetch_count": "15",
+            "# enable_search_cache": "(boolean, default: true): 是否启用搜索结果缓存。",
+            "# search_cache_ttl_seconds": "(integer, default: 7200 (2 hours)): 缓存的过期时间（秒）。",
+            "# search_cache_initial_fetch_count": "(integer, default: 15): 首次快速获取并展示给用户的条目数。"
         }
         
         config_example_path = f"{self.config_path}.example"
@@ -391,6 +412,37 @@ USER_SESSION_NAME=user_bot_session
             ID是否在白名单中
         """
         return chat_id in self.whitelist
+
+    def _load_search_bot_config(self) -> None:
+        """
+        从配置文件加载SearchBot相关的配置项
+        """
+        if "SearchBot" in self.config:
+            self.enable_search_cache = self.config.getboolean(
+                "SearchBot", "enable_search_cache", fallback=True
+            )
+            self.search_cache_ttl_seconds = self.config.getint(
+                "SearchBot", "search_cache_ttl_seconds", fallback=7200
+            )
+            self.search_cache_initial_fetch_count = self.config.getint(
+                "SearchBot", "search_cache_initial_fetch_count", fallback=15
+            )
+            self.logger.info("已加载 SearchBot 缓存配置")
+        else:
+            self.logger.warning("配置文件中未找到 [SearchBot] section，将使用默认缓存配置")
+            # Defaults are already set in __init__
+
+    def get_search_cache_enabled(self) -> bool:
+        """获取是否启用搜索缓存的配置"""
+        return self.enable_search_cache
+
+    def get_search_cache_ttl(self) -> int:
+        """获取搜索缓存的TTL（秒）"""
+        return self.search_cache_ttl_seconds
+
+    def get_search_cache_initial_fetch_count(self) -> int:
+        """获取搜索缓存首次获取的条目数"""
+        return self.search_cache_initial_fetch_count
         
     def get_userbot_env(self, key: str, default: Optional[str] = None) -> Optional[str]:
         """

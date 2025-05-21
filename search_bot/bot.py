@@ -136,7 +136,7 @@ class SearchBot:
         
         self.callback_query_handlers = CallbackQueryHandlers(
             client=self.client,
-            meilisearch_service=self.meilisearch_service
+            command_handler=self.command_handlers # Pass CommandHandlers instance
         )
         
         logger.info("已注册所有事件处理器")

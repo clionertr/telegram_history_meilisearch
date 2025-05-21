@@ -7,6 +7,7 @@
 
 import logging
 import re
+import base64 # Added
 from typing import Dict, Any, List, Optional, Tuple
 from datetime import datetime
 from telethon import Button
@@ -24,9 +25,10 @@ logger = logging.getLogger(__name__)
 
 
 def format_search_results(
-    results: Dict[str, Any], 
-    current_page: int, 
-    total_pages: int
+    results: Dict[str, Any],
+    current_page: int,
+    total_pages: int,
+    query_original: Optional[str] = None  # Added: The original full query for callback data
 ) -> Tuple[str, Optional[List[List[Button]]]]:
     """
     格式化 Meilisearch 搜索结果为用户友好的文本
@@ -39,9 +41,10 @@ def format_search_results(
         results: Meilisearch 返回的搜索结果字典
         current_page: 当前页码，从 1 开始
         total_pages: 总页数
+        query_original: 原始的、未解析的搜索查询字符串 (包含过滤器等)
         
     Returns:
-        Tuple[str, Optional[List[List[Button]]]]: 
+        Tuple[str, Optional[List[List[Button]]]]:
             - 格式化后的消息文本
             - 分页按钮列表（如果有分页）或 None（如果没有分页）
     """
@@ -55,13 +58,24 @@ def format_search_results(
         return "😕 未找到匹配的消息。请尝试其他关键词或检查搜索语法。", None
     
     # 提取基本搜索信息，使用安全的 get 方法并提供默认值
-    query = results.get('query', '未知查询')
+    # query_displayed will be the parsed query from Meili results,
+    # query_original is the full user input used for consistent callbacks
+    query_displayed = results.get('query', '未知查询')
+    if query_original is None:
+        logger.warning("format_search_results called without query_original. Pagination might lose filters.")
+        query_for_callback_raw = query_displayed # Fallback, might be just keywords
+    else:
+        query_for_callback_raw = query_original
+
     total_hits = results.get('estimatedTotalHits', len(hits))
     processing_time = results.get('processingTimeMs', 0)
     
     # 构建消息头部 (Markdown 格式)
+    # Display the original query if available and different from parsed, or just parsed
+    display_query_in_header = query_original if query_original and query_original.strip() != query_displayed.strip() else query_displayed
+    
     message_parts = [
-        f"🔍 搜索结果: \"**{query}**\"\n",
+        f"🔍 搜索结果: \"**{display_query_in_header}**\"\n",
         f"📊 找到约 **{total_hits}** 条匹配消息 (用时 **{processing_time}ms**)\n",
         f"📄 第 **{current_page}/{total_pages}** 页\n\n"
     ]
@@ -119,22 +133,28 @@ def format_search_results(
         # 5. 末页按钮 (如果不在最后一页)
         buttons_row = []
         
-        # 每个按钮存储数据格式：page_{页码}_{搜索查询}
-        # 进一步限制查询参数长度，防止回调数据过大导致边界问题
-        query_param = query[:20]  # 更严格地限制长度
+        # 每个按钮存储数据格式：search_page:{页码}:{base64_encoded_original_query}
+        try:
+            encoded_query_for_callback = base64.b64encode(query_for_callback_raw.encode('utf-8')).decode('utf-8')
+        except Exception as e:
+            logger.error(f"无法对查询进行Base64编码: '{query_for_callback_raw}', error: {e}")
+            # Fallback: use a placeholder or truncated query if encoding fails, though this is bad.
+            # This should ideally not happen.
+            encoded_query_for_callback = base64.b64encode("error_encoding_query".encode('utf-8')).decode('utf-8')
+
         
         # 首页和上一页按钮 (如果当前不在第一页)
         if current_page > 1:
-            buttons_row.append(Button.inline("⏮ 首页", f"page_1_{query_param}"))
-            buttons_row.append(Button.inline("◀️ 上一页", f"page_{current_page - 1}_{query_param}"))
+            buttons_row.append(Button.inline("⏮ 首页", f"search_page:1:{encoded_query_for_callback}"))
+            buttons_row.append(Button.inline("◀️ 上一页", f"search_page:{current_page - 1}:{encoded_query_for_callback}"))
         
         # 当前页/总页数按钮 (不可点击)
-        buttons_row.append(Button.inline(f"📄 {current_page}/{total_pages}", f"noop"))
+        buttons_row.append(Button.inline(f"📄 {current_page}/{total_pages}", f"noop")) # noop is fine
         
         # 下一页和末页按钮 (如果当前不在最后一页)
         if current_page < total_pages:
-            buttons_row.append(Button.inline("▶️ 下一页", f"page_{current_page + 1}_{query_param}"))
-            buttons_row.append(Button.inline("⏭ 末页", f"page_{total_pages}_{query_param}"))
+            buttons_row.append(Button.inline("▶️ 下一页", f"search_page:{current_page + 1}:{encoded_query_for_callback}"))
+            buttons_row.append(Button.inline("⏭ 末页", f"search_page:{total_pages}:{encoded_query_for_callback}"))
         
         buttons = [buttons_row]
         

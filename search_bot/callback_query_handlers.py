@@ -7,13 +7,18 @@
 
 import logging
 import re
+import base64 # Added
+import time   # Added
 from typing import Optional, Dict, Any, List
 
 from telethon import events, Button
 from telethon.events import CallbackQuery
 
-from core.meilisearch_service import MeiliSearchService
+from core.meilisearch_service import MeiliSearchService # Will be accessed via command_handler
 from search_bot.message_formatters import format_search_results, format_error_message
+# Import CommandHandlers for type hinting, assuming it won't create circular dependency
+# If it does, we might need to use 'from typing import TYPE_CHECKING' and forward reference
+from search_bot.command_handlers import CommandHandlers
 
 # 配置日志记录器
 logger = logging.getLogger(__name__)
@@ -27,16 +32,17 @@ class CallbackQueryHandlers:
     特别是搜索结果的分页按钮。
     """
     
-    def __init__(self, client, meilisearch_service: MeiliSearchService) -> None:
+    def __init__(self, client, command_handler: CommandHandlers) -> None: # Changed meilisearch_service to command_handler
         """
         初始化回调查询处理器
         
         Args:
             client: Telethon 客户端
-            meilisearch_service: Meilisearch 服务实例
+            command_handler: CommandHandlers 实例，用于访问缓存服务和搜索逻辑
         """
         self.client = client
-        self.meilisearch_service = meilisearch_service
+        self.command_handler = command_handler # Store CommandHandlers instance
+        self.cache_service = command_handler.cache_service # Convenience access
         
         # 注册回调处理函数
         self.register_handlers()
@@ -47,10 +53,10 @@ class CallbackQueryHandlers:
         """
         注册所有回调查询处理函数
         """
-        # 分页按钮回调处理
+        # 分页按钮回调处理 - New pattern for base64 encoded full query
         self.client.add_event_handler(
             self.pagination_callback,
-            events.CallbackQuery(pattern=r"^page_(\d+)_(.*)$")
+            events.CallbackQuery(pattern=r"^search_page:(\d+):(.+)$") # Updated pattern
         )
         
         # "noop" 按钮回调处理（当前页码按钮，不执行任何操作）
@@ -60,90 +66,122 @@ class CallbackQueryHandlers:
         )
         
         logger.info("已注册所有回调查询处理函数")
-    
+
     async def pagination_callback(self, event: CallbackQuery.Event) -> None:
         """
-        处理分页按钮的回调查询
-        
-        解析回调数据，提取页码和查询参数，重新执行搜索并更新消息。
-        
-        回调数据格式: page_{页码}_{查询参数}
-        
-        Args:
-            event: Telethon CallbackQuery 事件对象
+        处理分页按钮的回调查询 (search_page:<page_num>:<original_query_b64>)
         """
         try:
-            # 获取用户信息（用于日志）
             sender = await event.get_sender()
             user_id = sender.id
-            
-            # 解析回调数据
             data = event.data.decode('utf-8')
             logger.debug(f"收到分页回调: {data}, 用户: {user_id}")
-            
-            # 使用正则表达式提取页码和查询参数
-            match = re.match(r"^page_(\d+)_(.*)$", data)
+
+            match = re.match(r"^search_page:(\d+):(.+)$", data)
             if not match:
                 logger.warning(f"无效的回调数据格式: {data}")
                 await event.answer("无效的请求格式", alert=True)
                 return
-            
-            # 提取页码和查询参数
+
             page = int(match.group(1))
-            query = match.group(2)
+            original_query_b64 = match.group(2)
             
-            # 检查查询参数是否可能被截断
-            if len(query) >= 20:  # 在 message_formatters.py 中查询参数被限制为 20 个字符
-                logger.warning(f"查询参数可能被截断: {query}")
-                # 这里我们仍然使用截断的查询，但记录警告
-                # 未来可以考虑实现用户会话存储或缓存完整查询
-            
-            logger.info(f"处理分页请求: 页码={page}, 查询='{query}', 用户={user_id}")
-            
-            # 通知用户正在处理
-            await event.answer("正在加载新页面...")
-            
-            # 设置搜索参数
-            hits_per_page = 5  # 与 command_handlers.py 中保持一致
-            sort = ["date:desc"]  # 默认按时间倒序
-            
-            # 执行搜索
-            results = self.meilisearch_service.search(
-                query=query,
-                filters=None,  # 注意：这里我们没有保留高级过滤条件，这是一个简化实现的局限
-                sort=sort,
-                page=page,
-                hits_per_page=hits_per_page
-            )
-            
-            # 计算总页数
-            total_hits = results.get('estimatedTotalHits', 0)
-            total_pages = (total_hits + hits_per_page - 1) // hits_per_page if total_hits > 0 else 0
-            
-            # 格式化搜索结果
-            formatted_message, buttons = format_search_results(results, page, total_pages)
-            
-            # 更新消息
-            await event.edit(
-                formatted_message,
-                buttons=buttons,
-                parse_mode='md'  # 启用 Markdown 解析
-            )
-            
-            logger.info(f"已更新分页消息: 页码={page}/{total_pages}, 用户={user_id}")
-            
-        except Exception as e:
-            logger.error(f"处理分页回调时出错: {e}")
             try:
-                await event.answer(f"加载页面出错: {str(e)[:200]}", alert=True)
-            except:
-                # 如果无法通过 answer 显示错误，尝试编辑消息
+                original_query = base64.b64decode(original_query_b64).decode('utf-8')
+            except Exception as e:
+                logger.error(f"Base64解码原始查询失败: {e} (data: {original_query_b64})")
+                await event.answer("无法解析查询参数", alert=True)
+                return
+
+            logger.info(f"处理分页请求: 页码={page}, 原始查询='{original_query}', 用户={user_id}")
+            
+            # Use command_handler methods to parse and build filters
+            parsed_query, filters_dict = self.command_handler._parse_advanced_syntax(original_query) # pylint: disable=protected-access
+            meili_filters = self.command_handler._build_meilisearch_filters(filters_dict) if filters_dict else None # pylint: disable=protected-access
+
+            hits_per_page = 5  # Standard items per page
+            sort_options = ["date:desc"]
+
+            # Check cache
+            cached_entry = None
+            if self.cache_service.is_cache_enabled():
+                cached_entry = self.cache_service.get_from_cache(parsed_query, filters_dict)
+
+            if cached_entry:
+                cached_results, is_partial, total_hits_from_cache, fetch_ts = cached_entry
+                logger.info(f"分页缓存命中 for '{parsed_query}'. Partial: {is_partial}, Total Hits: {total_hits_from_cache}")
+
+                if not is_partial: # Full data in cache
+                    results_to_format = {
+                        'hits': cached_results[(page - 1) * hits_per_page : page * hits_per_page],
+                        'query': parsed_query, 'processingTimeMs': 0, 'estimatedTotalHits': total_hits_from_cache
+                    }
+                    total_pages = (total_hits_from_cache + hits_per_page - 1) // hits_per_page if total_hits_from_cache > 0 else 0
+                    formatted_msg, buttons = format_search_results(results_to_format, page, total_pages, query_original=original_query)
+                    await event.edit(formatted_msg, buttons=buttons, parse_mode='md')
+                    await event.answer() # Acknowledge callback
+                    return
+
+                # Partial data in cache
+                if total_hits_from_cache is not None:
+                    if page * hits_per_page <= len(cached_results): # Page is within the initial fetch
+                        results_to_format = {
+                            'hits': cached_results[(page - 1) * hits_per_page : page * hits_per_page],
+                            'query': parsed_query, 'processingTimeMs': 0, 'estimatedTotalHits': total_hits_from_cache
+                        }
+                        total_pages = (total_hits_from_cache + hits_per_page - 1) // hits_per_page if total_hits_from_cache > 0 else 0
+                        formatted_msg, buttons = format_search_results(results_to_format, page, total_pages, query_original=original_query)
+                        await event.edit(formatted_msg, buttons=buttons, parse_mode='md')
+                        await event.answer() # Acknowledge callback
+                        return
+                    else: # Requested page is beyond initial fetch
+                        cache_key_for_async = self.cache_service._generate_cache_key(parsed_query, filters_dict) # pylint: disable=protected-access
+                        if cache_key_for_async in self.command_handler.active_full_fetches or \
+                           (fetch_ts is not None and time.time() - fetch_ts < 60): # Task running or recently started
+                            await event.answer("⏳ 更多结果加载中，请稍候再试...", alert=False) # Toast notification
+                            return
+                        else: # Full fetch might have completed or failed. Re-check cache.
+                            fresh_cached_entry = self.cache_service.get_from_cache(parsed_query, filters_dict)
+                            if fresh_cached_entry and not fresh_cached_entry[1]: # is_partial is False
+                                cached_results_upd, _, total_hits_upd, _ = fresh_cached_entry
+                                results_to_format = {
+                                    'hits': cached_results_upd[(page - 1) * hits_per_page : page * hits_per_page],
+                                    'query': parsed_query, 'processingTimeMs': 0, 'estimatedTotalHits': total_hits_upd
+                                }
+                                total_pages = (total_hits_upd + hits_per_page - 1) // hits_per_page if total_hits_upd > 0 else 0
+                                formatted_msg, buttons = format_search_results(results_to_format, page, total_pages, query_original=original_query)
+                                await event.edit(formatted_msg, buttons=buttons, parse_mode='md')
+                                await event.answer() # Acknowledge callback
+                                return
+            
+            # Cache miss or partial data not sufficient, and async fetch not helpful. Fetch directly.
+            logger.info(f"分页缓存未命中/不足 for '{parsed_query}', page {page}. 直接从 MeiliSearch 获取。")
+            await event.answer("正在加载新页面...") # Toast notification
+            
+            page_specific_results_obj = await self.command_handler._get_results_from_meili( # pylint: disable=protected-access
+                parsed_query, meili_filters, sort_options, page, hits_per_page
+            )
+            estimated_total_hits = page_specific_results_obj.get('estimatedTotalHits', 0)
+            total_pages = (estimated_total_hits + hits_per_page - 1) // hits_per_page if estimated_total_hits > 0 else 0
+            
+            formatted_msg, buttons = format_search_results(page_specific_results_obj, page, total_pages, query_original=original_query)
+            await event.edit(formatted_msg, buttons=buttons, parse_mode='md')
+            # No event.answer() here as the edit itself is a confirmation if it doesn't error.
+            # If an error occurs during edit, the except block will handle event.answer.
+
+        except Exception as e:
+            logger.error(f"处理分页回调时出错: {e}", exc_info=True)
+            try:
+                # Try to answer with an alert, this is more likely to be seen by the user.
+                await event.answer(f"加载页面出错: {str(e)[:190]}", alert=True) # Max 200 chars for answer
+            except Exception: # pylint: disable=broad-except
+                # Fallback to editing message if answer fails (e.g., if callback already answered)
                 try:
-                    error_message = format_error_message(f"加载页面出错: {str(e)}")
-                    await event.edit(error_message, parse_mode='md')  # 启用 Markdown 解析
-                except:
-                    logger.error("无法通知用户错误信息")
-    
+                    error_text = format_error_message(f"加载页面时出错: {str(e)}")
+                    await event.edit(error_text, parse_mode='md')
+                except Exception: # pylint: disable=broad-except
+                    logger.error("无法通过 answer 或 edit 通知用户分页错误")
+
     async def noop_callback(self, event: CallbackQuery.Event) -> None:
         """
         处理 noop 回调 (不执行任何操作)
@@ -161,22 +199,22 @@ class CallbackQueryHandlers:
 
 # 辅助函数：创建回调查询处理器并注册到客户端
 def setup_callback_handlers(
-    client, 
-    meilisearch_service: MeiliSearchService
+    client,
+    command_handler: CommandHandlers # Changed
 ) -> CallbackQueryHandlers:
     """
     创建回调查询处理器并将其注册到客户端
     
     Args:
         client: Telethon 客户端
-        meilisearch_service: Meilisearch 服务实例
+        command_handler: CommandHandlers 实例
         
     Returns:
         CallbackQueryHandlers: 回调查询处理器实例
     """
     handler = CallbackQueryHandlers(
         client=client,
-        meilisearch_service=meilisearch_service
+        command_handler=command_handler # Pass command_handler
     )
     
     return handler
