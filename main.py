@@ -13,7 +13,7 @@ import logging
 import signal
 import sys
 import uvicorn
-from typing import Optional, List
+from typing import Optional, List, Dict, Any
 
 from user_bot.client import UserBotClient
 from search_bot.bot import SearchBot
@@ -23,9 +23,11 @@ from api.main import app as fastapi_app
 user_bot_client: Optional[UserBotClient] = None
 search_bot: Optional[SearchBot] = None
 # 存储任务对象，用于在需要时取消任务
-tasks: List[asyncio.Task] = []
+tasks: Dict[str, asyncio.Task] = {}
 # FastAPI 服务器实例
 fastapi_server: Optional[uvicorn.Server] = None
+# User Bot 重启事件
+userbot_restart_event: asyncio.Event = asyncio.Event()
 
 def setup_logging(level=logging.INFO) -> None:
     """
@@ -64,14 +66,14 @@ async def shutdown_clients() -> None:
     logger = logging.getLogger(__name__)
     
     # 取消所有正在运行的任务
-    for task in tasks:
+    for name, task in tasks.items():
         if not task.done():
-            logger.debug(f"取消任务: {task.get_name()}")
+            logger.debug(f"取消任务: {name}")
             task.cancel()
     
     # 等待所有任务完成取消
     if tasks:
-        await asyncio.gather(*tasks, return_exceptions=True)
+        await asyncio.gather(*tasks.values(), return_exceptions=True)
     
     # 断开UserBot连接
     if user_bot_client is not None:
@@ -100,6 +102,58 @@ async def shutdown_clients() -> None:
         except Exception as e:
             logger.error(f"关闭FastAPI服务器时出错: {str(e)}")
 
+async def restart_userbot_task() -> None:
+    """
+    监听重启事件并重启User Bot任务
+    
+    当userbot_restart_event被设置时，停止当前的User Bot任务，
+    重新创建并启动一个新的User Bot任务
+    """
+    global user_bot_client, tasks
+    logger = logging.getLogger(__name__)
+    
+    try:
+        while True:
+            # 等待重启事件
+            await userbot_restart_event.wait()
+            logger.info("检测到User Bot重启事件")
+            
+            try:
+                # 如果有正在运行的User Bot任务，先停止它
+                if "UserBotTask" in tasks and not tasks["UserBotTask"].done():
+                    logger.info("停止当前的User Bot任务")
+                    tasks["UserBotTask"].cancel()
+                    
+                    # 等待任务取消完成
+                    try:
+                        await tasks["UserBotTask"]
+                    except asyncio.CancelledError:
+                        logger.info("User Bot任务已取消")
+                    
+                    # 断开User Bot客户端连接
+                    await user_bot_client.disconnect()
+                
+                # 重新加载配置
+                user_bot_client.reload_config()
+                
+                # 创建新的User Bot任务
+                logger.info("创建新的User Bot任务")
+                tasks["UserBotTask"] = asyncio.create_task(
+                    user_bot_client.run(),
+                    name="UserBotTask"
+                )
+                
+                logger.info("User Bot已重新启动")
+            except Exception as e:
+                logger.error(f"重启User Bot时出错: {str(e)}")
+            finally:
+                # 重置重启事件
+                userbot_restart_event.clear()
+    except asyncio.CancelledError:
+        # 处理监控任务自身被取消的情况
+        logger.info("User Bot重启监控任务被取消")
+        # 不重新抛出异常，让任务安静地结束
+
 async def async_main() -> None:
     """
     主异步函数
@@ -115,8 +169,8 @@ async def async_main() -> None:
     try:
         # 实例化UserBotClient（使用单例模式）
         user_bot_client = UserBotClient()
-        # 实例化SearchBot
-        search_bot = SearchBot()
+        # 实例化SearchBot，传递User Bot重启事件
+        search_bot = SearchBot(userbot_restart_event=userbot_restart_event)
         
         logger.info("已创建UserBot和SearchBot实例")
         
@@ -133,27 +187,30 @@ async def async_main() -> None:
         
         # 创建并存储任务，使用create_task而不是直接使用gather
         # 这样我们可以在需要时单独取消任务
-        user_bot_task = asyncio.create_task(
+        tasks["UserBotTask"] = asyncio.create_task(
             user_bot_client.run(),  # 使用run方法替代start方法，以保持客户端运行
             name="UserBotTask"
         )
-        search_bot_task = asyncio.create_task(
+        tasks["SearchBotTask"] = asyncio.create_task(
             search_bot.run(),
             name="SearchBotTask"
         )
-        fastapi_task = asyncio.create_task(
+        tasks["FastAPITask"] = asyncio.create_task(
             fastapi_server.serve(),
             name="FastAPITask"
         )
         
-        # 存储任务引用，以便于后续管理
-        tasks = [user_bot_task, search_bot_task, fastapi_task]
-        
+        # 创建User Bot重启监听任务
+        tasks["RestartMonitorTask"] = asyncio.create_task(
+            restart_userbot_task(),
+            name="RestartMonitorTask"
+        )
         logger.info("已启动所有服务任务")
         
         # 等待所有任务完成
-        # 如果任务被取消或出错，will_cancel_current会被设置为True，异常将被传播
-        await asyncio.gather(user_bot_task, search_bot_task, fastapi_task)
+        # 使用return_exceptions=True确保即使某个任务抛出异常，其他任务也不会被取消
+        await asyncio.gather(*tasks.values(), return_exceptions=True)
+        
         
     except Exception as e:
         logger.exception(f"运行客户端时发生错误: {str(e)}")

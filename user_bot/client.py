@@ -10,6 +10,7 @@ Userbot客户端模块
 import os
 import logging
 import functools
+import asyncio
 from typing import Optional
 from pathlib import Path
 from telethon import TelegramClient, events
@@ -83,15 +84,26 @@ class UserBotClient:
         self.meilisearch_service = MeiliSearchService(host=host, api_key=api_key)
         logger.info("已初始化MeiliSearchService")
 
+        # 从配置获取会话名称
+        user_session_name = self.config_manager.get_userbot_env("USER_SESSION_NAME")
+        if user_session_name:
+            self.session_name = user_session_name
+            logger.info(f"从User Bot配置加载会话名称: {self.session_name}")
+
         # 构建会话文件路径（存储在.sessions目录下）
-        session_path = os.path.join(SESSIONS_DIR, session_name)
+        session_path = os.path.join(SESSIONS_DIR, self.session_name)
 
-        # 从配置获取API凭据
-        # 首先尝试从环境变量获取
-        api_id = self.config_manager.get_env("TELEGRAM_API_ID")
-        api_hash = self.config_manager.get_env("TELEGRAM_API_HASH")
+        # 从User Bot配置获取API凭据
+        api_id = self.config_manager.get_userbot_env("USER_API_ID")
+        api_hash = self.config_manager.get_userbot_env("USER_API_HASH")
 
-        # 如果环境变量中没有，则从配置文件中获取
+        # 如果User Bot配置中没有，尝试从全局环境变量获取
+        if not api_id:
+            api_id = self.config_manager.get_env("TELEGRAM_API_ID")
+        if not api_hash:
+            api_hash = self.config_manager.get_env("TELEGRAM_API_HASH")
+
+        # 如果环境变量中也没有，则从配置文件中获取
         if not api_id:
             api_id = self.config_manager.get_config("Telegram", "API_ID")
         if not api_hash:
@@ -254,5 +266,33 @@ class UserBotClient:
             
         logger.info("UserBotClient 正在运行，等待事件...")
         
-        # 运行直到断开连接
-        await self._client.run_until_disconnected()
+        try:
+            # 运行直到断开连接
+            await self._client.run_until_disconnected()
+        except asyncio.CancelledError:
+            # 优雅地处理任务取消
+            logger.info("UserBotClient 任务被取消，正在关闭...")
+            # 不重新抛出异常，让任务安静地结束
+        except Exception as e:
+            logger.error(f"UserBotClient 运行时出错: {str(e)}")
+            raise
+        
+    def reload_config(self) -> None:
+        """
+        重新加载配置
+        
+        在配置更改后调用，重新加载User Bot的配置
+        注意：此方法不会重新创建客户端实例，需要先断开连接再重新启动
+        """
+        logger.info("正在重新加载User Bot配置...")
+        
+        # 重新加载User Bot环境变量
+        self.config_manager.load_userbot_env()
+        
+        # 更新会话名称（如果已更改）
+        user_session_name = self.config_manager.get_userbot_env("USER_SESSION_NAME")
+        if user_session_name and user_session_name != self.session_name:
+            logger.info(f"会话名称已更改: {self.session_name} -> {user_session_name}")
+            self.session_name = user_session_name
+            
+        logger.info("User Bot配置已重新加载")

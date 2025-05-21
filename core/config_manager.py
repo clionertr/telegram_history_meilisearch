@@ -19,6 +19,11 @@ from configparser import ConfigParser
 import dotenv
 
 
+class UserBotConfigError(Exception):
+    """User Bot 配置相关错误"""
+    pass
+
+
 class ConfigError(Exception):
     """配置相关错误的基类"""
     pass
@@ -40,6 +45,7 @@ class ConfigManager:
                  env_path: str = ".env",
                  config_path: str = "config.ini",
                  whitelist_path: str = "whitelist.json",
+                 userbot_env_path: str = ".env.userbot",
                  create_if_not_exists: bool = True) -> None:
         """
         初始化配置管理器
@@ -48,6 +54,7 @@ class ConfigManager:
             env_path: .env文件的路径，默认为项目根目录下的.env
             config_path: 配置文件的路径，默认为项目根目录下的config.ini
             whitelist_path: 白名单文件的路径，默认为项目根目录下的whitelist.json
+            userbot_env_path: User Bot 环境变量文件的路径，默认为项目根目录下的.env.userbot
             create_if_not_exists: 如果配置文件不存在，是否创建默认文件，默认为True
         """
         self.logger = logging.getLogger(__name__)
@@ -56,14 +63,17 @@ class ConfigManager:
         self.env_path = env_path
         self.config_path = config_path
         self.whitelist_path = whitelist_path
+        self.userbot_env_path = userbot_env_path
         
         # 存储配置数据
         self.env_vars: Dict[str, str] = {}
+        self.userbot_env_vars: Dict[str, str] = {}
         self.config = ConfigParser()
         self.whitelist: List[int] = []
         
         # 加载配置
         self.load_env()
+        self.load_userbot_env()
         
         # 文件不存在且需要创建默认文件
         if create_if_not_exists:
@@ -71,6 +81,8 @@ class ConfigManager:
                 self.create_default_config()
             if not os.path.exists(whitelist_path):
                 self.save_whitelist()  # 创建空白名单
+            if not os.path.exists(userbot_env_path):
+                self.create_default_userbot_env()
                 
         # 加载配置文件和白名单
         self.load_config()
@@ -163,6 +175,45 @@ class ConfigManager:
             self.config.write(f)
             
         self.logger.info(f"已创建默认配置文件 {self.config_path}")
+        
+    def load_userbot_env(self) -> None:
+        """
+        从.env.userbot文件加载User Bot环境变量
+        
+        如果.env.userbot文件不存在，会记录警告但不会抛出异常
+        """
+        if os.path.exists(self.userbot_env_path):
+            # 加载User Bot环境变量但不设置到os.environ中，防止影响全局环境
+            with open(self.userbot_env_path) as f:
+                self.userbot_env_vars = dotenv.dotenv_values(stream=f)
+            self.logger.info(f"从 {self.userbot_env_path} 加载User Bot环境变量")
+        else:
+            self.userbot_env_vars = {}
+            self.logger.warning(f"{self.userbot_env_path} 文件不存在，无法加载User Bot环境变量")
+            
+    def create_default_userbot_env(self) -> None:
+        """
+        创建默认User Bot环境变量文件
+        
+        如果.env.userbot文件不存在，创建一个包含注释和默认值的.env.userbot文件
+        """
+        default_content = """# User Bot环境变量配置文件
+# 此文件包含User Bot的专用配置
+
+# Telegram API凭据（必需）
+# USER_API_ID=your_api_id
+# USER_API_HASH=your_api_hash
+
+# 会话名称（可选，默认为user_bot_session）
+USER_SESSION_NAME=user_bot_session
+
+# 其他配置项
+# USER_PROXY_URL=socks5://user:pass@host:port
+"""
+        with open(self.userbot_env_path, "w", encoding="utf-8") as f:
+            f.write(default_content)
+            
+        self.logger.info(f"已创建默认User Bot环境变量文件 {self.userbot_env_path}")
 
     def create_example_files(self) -> None:
         """
@@ -212,6 +263,26 @@ class ConfigManager:
             json.dump(whitelist_example, f, indent=4, ensure_ascii=False)
             
         self.logger.info(f"已创建白名单文件示例 {whitelist_example_path}")
+        
+        # 创建.env.userbot.example
+        userbot_env_example_content = """# User Bot环境变量配置文件示例
+# 此文件包含User Bot的专用配置
+
+# Telegram API凭据（必需）
+USER_API_ID=your_api_id_here
+USER_API_HASH=your_api_hash_here
+
+# 会话名称（可选，默认为user_bot_session）
+USER_SESSION_NAME=user_bot_session
+
+# 其他配置项
+# USER_PROXY_URL=socks5://user:pass@host:port
+"""
+        userbot_env_example_path = f"{self.userbot_env_path}.example"
+        with open(userbot_env_example_path, "w", encoding="utf-8") as f:
+            f.write(userbot_env_example_content)
+            
+        self.logger.info(f"已创建User Bot环境变量文件示例 {userbot_env_example_path}")
 
     def load_whitelist(self) -> None:
         """
@@ -320,6 +391,90 @@ class ConfigManager:
             ID是否在白名单中
         """
         return chat_id in self.whitelist
+        
+    def get_userbot_env(self, key: str, default: Optional[str] = None) -> Optional[str]:
+        """
+        获取User Bot环境变量
+        
+        Args:
+            key: 环境变量名
+            default: 默认值，如果环境变量不存在则返回此值
+            
+        Returns:
+            环境变量的值，如果不存在则返回默认值
+        """
+        return self.userbot_env_vars.get(key, default)
+        
+    def set_userbot_env(self, key: str, value: str) -> None:
+        """
+        设置User Bot环境变量
+        
+        Args:
+            key: 环境变量名
+            value: 环境变量值
+        """
+        self.userbot_env_vars[key] = value
+        self.save_userbot_env()
+        self.logger.info(f"已设置User Bot环境变量 {key}")
+        
+    def save_userbot_env(self) -> None:
+        """
+        保存User Bot环境变量到文件
+        """
+        # 构建环境变量文件内容
+        content = "# User Bot环境变量配置文件\n"
+        content += "# 此文件包含User Bot的专用配置\n\n"
+        
+        # 添加所有环境变量
+        for key, value in self.userbot_env_vars.items():
+            content += f"{key}={value}\n"
+            
+        # 写入文件
+        with open(self.userbot_env_path, "w", encoding="utf-8") as f:
+            f.write(content)
+            
+        self.logger.info(f"已保存User Bot环境变量到 {self.userbot_env_path}")
+        
+    def get_userbot_config_dict(self, exclude_sensitive: bool = True) -> Dict[str, str]:
+        """
+        获取User Bot配置字典，用于显示给用户
+        
+        Args:
+            exclude_sensitive: 是否排除敏感信息（如API_HASH），默认为True
+            
+        Returns:
+            User Bot配置字典
+        """
+        result = {}
+        
+        # 复制所有环境变量
+        for key, value in self.userbot_env_vars.items():
+            # 排除敏感信息
+            if exclude_sensitive and key in ["USER_API_HASH"]:
+                value = "******"  # 用星号替换敏感信息
+                
+            result[key] = value
+            
+        return result
+        
+    def delete_userbot_env(self, key: str) -> bool:
+        """
+        删除User Bot环境变量
+        
+        Args:
+            key: 要删除的环境变量名
+            
+        Returns:
+            是否成功删除（如不存在则返回False）
+        """
+        if key not in self.userbot_env_vars:
+            self.logger.info(f"User Bot环境变量 {key} 不存在，无需删除")
+            return False
+            
+        del self.userbot_env_vars[key]
+        self.save_userbot_env()
+        self.logger.info(f"已删除User Bot环境变量 {key}")
+        return True
 
 
 class SyncPointManager:

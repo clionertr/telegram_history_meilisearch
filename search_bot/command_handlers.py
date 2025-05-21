@@ -9,6 +9,7 @@
 
 import logging
 import re
+import asyncio
 from typing import List, Optional, Union, Dict, Any, Tuple
 from datetime import datetime
 
@@ -31,11 +32,12 @@ class CommandHandlers:
     """
 
     def __init__(
-        self, 
-        client, 
-        meilisearch_service: MeiliSearchService, 
+        self,
+        client,
+        meilisearch_service: MeiliSearchService,
         config_manager: ConfigManager,
-        admin_ids: List[int]
+        admin_ids: List[int],
+        userbot_restart_event: Optional[asyncio.Event] = None
     ) -> None:
         """
         初始化命令处理器
@@ -45,11 +47,13 @@ class CommandHandlers:
             meilisearch_service: Meilisearch 服务实例
             config_manager: 配置管理器实例
             admin_ids: 管理员用户 ID 列表
+            userbot_restart_event: User Bot 重启事件，用于触发重启
         """
         self.client = client
         self.meilisearch_service = meilisearch_service
         self.config_manager = config_manager
         self.admin_ids = admin_ids
+        self.userbot_restart_event = userbot_restart_event
         
         # 注册命令处理函数
         self.register_handlers()
@@ -86,6 +90,22 @@ class CommandHandlers:
         self.client.add_event_handler(
             self.remove_whitelist_command,
             events.NewMessage(pattern=r"^/remove_whitelist(?:\s+(-?\d+))?$")
+        )
+        
+        # User Bot 配置相关命令
+        self.client.add_event_handler(
+            self.set_userbot_config_command,
+            events.NewMessage(pattern=r"^/set_userbot_config(?:\s+(\S+))?(?:\s+(.+))?$")
+        )
+        
+        self.client.add_event_handler(
+            self.view_userbot_config_command,
+            events.NewMessage(pattern=r"^/view_userbot_config$")
+        )
+        
+        self.client.add_event_handler(
+            self.restart_userbot_command,
+            events.NewMessage(pattern=r"^/restart_userbot$")
         )
         
         logger.info("已注册所有命令处理函数")
@@ -370,14 +390,144 @@ class CommandHandlers:
         except Exception as e:
             logger.error(f"处理 /remove_whitelist 命令时出错: {e}")
             await event.respond(f"⚠️ 移除白名单时出现错误: {str(e)}")
+            
+    async def set_userbot_config_command(self, event) -> None:
+        """
+        处理 /set_userbot_config 命令 (管理员权限)
+        
+        设置 User Bot 配置项
+        
+        Args:
+            event: Telethon 事件对象
+        """
+        try:
+            # 检查权限
+            if not await self.is_admin(event):
+                await event.respond("⚠️ 此命令需要管理员权限。")
+                return
+            
+            # 获取参数
+            message_text = event.message.text
+            match = re.match(r"^/set_userbot_config(?:\s+(\S+))?(?:\s+(.+))?$", message_text)
+            
+            if not match or not match.group(1):
+                help_text = """请提供要设置的配置项和值，例如：
+`/set_userbot_config USER_SESSION_NAME my_session`
+
+可设置的配置项包括：
+- `USER_API_ID` - Telegram API ID
+- `USER_API_HASH` - Telegram API Hash
+- `USER_SESSION_NAME` - 会话名称（如需修改，需要重启 User Bot）
+- `USER_PROXY_URL` - 代理服务器 URL（如需使用）
+
+⚠️ 注意：修改配置后，需要使用 `/restart_userbot` 命令使配置生效。"""
+                await event.respond(help_text, parse_mode=None)
+                return
+            
+            key = match.group(1).upper()  # 转为大写
+            if not match.group(2):
+                await event.respond(f"请提供 `{key}` 的值，例如：`/set_userbot_config {key} value`")
+                return
+                
+            value = match.group(2).strip()
+            
+            # 添加USER_前缀（如果没有）
+            if not key.startswith("USER_"):
+                key = f"USER_{key}"
+                
+            # 设置配置
+            self.config_manager.set_userbot_env(key, value)
+            
+            # 发送成功消息
+            await event.respond(f"✅ 已设置 User Bot 配置项 `{key}` = `{value if key != 'USER_API_HASH' else '******'}`\n\n使用 `/restart_userbot` 命令使配置生效。", parse_mode=None)
+            logger.info(f"管理员 {(await event.get_sender()).id} 设置 User Bot 配置项 {key}")
+            
+        except Exception as e:
+            logger.error(f"处理 /set_userbot_config 命令时出错: {e}")
+            await event.respond(f"⚠️ 设置 User Bot 配置时出现错误: {str(e)}")
+            
+    async def view_userbot_config_command(self, event) -> None:
+        """
+        处理 /view_userbot_config 命令 (管理员权限)
+        
+        查看 User Bot 当前配置
+        
+        Args:
+            event: Telethon 事件对象
+        """
+        try:
+            # 检查权限
+            if not await self.is_admin(event):
+                await event.respond("⚠️ 此命令需要管理员权限。")
+                return
+            
+            # 获取配置
+            config_dict = self.config_manager.get_userbot_config_dict(exclude_sensitive=True)
+            
+            if not config_dict:
+                await event.respond("ℹ️ User Bot 尚未配置任何环境变量。使用 `/set_userbot_config` 命令进行配置。")
+                return
+                
+            # 格式化配置信息
+            config_text = "📝 **User Bot 当前配置**\n\n"
+            for key, value in config_dict.items():
+                config_text += f"- `{key}` = `{value}`\n"
+                
+            config_text += "\n使用 `/set_userbot_config <key> <value>` 修改配置，使用 `/restart_userbot` 使配置生效。"
+            
+            await event.respond(config_text, parse_mode=None)
+            logger.info(f"管理员 {(await event.get_sender()).id} 查看 User Bot 配置")
+            
+        except Exception as e:
+            logger.error(f"处理 /view_userbot_config 命令时出错: {e}")
+            await event.respond(f"⚠️ 查看 User Bot 配置时出现错误: {str(e)}")
+            
+    async def restart_userbot_command(self, event) -> None:
+        """
+        处理 /restart_userbot 命令 (管理员权限)
+        
+        重启 User Bot
+        
+        Args:
+            event: Telethon 事件对象
+        """
+        try:
+            # 检查权限
+            if not await self.is_admin(event):
+                await event.respond("⚠️ 此命令需要管理员权限。")
+                return
+            
+            # 检查是否有重启事件
+            if not self.userbot_restart_event:
+                await event.respond("⚠️ 重启功能未初始化，无法重启 User Bot。")
+                logger.error("尝试重启 User Bot，但 userbot_restart_event 未初始化")
+                return
+                
+            # 发送重启消息
+            await event.respond("🔄 正在重启 User Bot，请稍候...")
+            logger.info(f"管理员 {(await event.get_sender()).id} 触发 User Bot 重启")
+            
+            # 设置重启事件
+            self.userbot_restart_event.set()
+            
+            # 等待一段时间，让重启过程完成
+            await asyncio.sleep(5)
+            
+            # 发送重启完成消息
+            await event.respond("✅ User Bot 已重新启动，新配置已生效。")
+            
+        except Exception as e:
+            logger.error(f"处理 /restart_userbot 命令时出错: {e}")
+            await event.respond(f"⚠️ 重启 User Bot 时出现错误: {str(e)}")
 
 
 # 辅助函数：创建命令处理器并注册到客户端
 def setup_command_handlers(
-    client, 
-    meilisearch_service: MeiliSearchService, 
+    client,
+    meilisearch_service: MeiliSearchService,
     config_manager: ConfigManager,
-    admin_ids: List[int]
+    admin_ids: List[int],
+    userbot_restart_event: Optional[asyncio.Event] = None
 ) -> CommandHandlers:
     """
     创建命令处理器并将其注册到客户端
@@ -387,6 +537,7 @@ def setup_command_handlers(
         meilisearch_service: Meilisearch 服务实例
         config_manager: 配置管理器实例
         admin_ids: 管理员用户 ID 列表
+        userbot_restart_event: User Bot 重启事件，用于触发重启
         
     Returns:
         CommandHandlers: 命令处理器实例
@@ -395,7 +546,8 @@ def setup_command_handlers(
         client=client,
         meilisearch_service=meilisearch_service,
         config_manager=config_manager,
-        admin_ids=admin_ids
+        admin_ids=admin_ids,
+        userbot_restart_event=userbot_restart_event
     )
     
     return handler

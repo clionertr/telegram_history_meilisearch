@@ -181,13 +181,13 @@
 *   **完成时间:** 2025/5/20 下午2:13 (大致时间，基于子任务报告)
 *   **执行者:** 💻 Code Mode
 *   **主要成果:**
-    *   在 [`search_bot/bot.py`](search_bot/bot.py) 中成功实现了 `SearchBot` 类。
-    *   该类负责初始化 Telethon 客户端 (使用 Bot Token 进行认证，会话名为 `search_bot.session`，存储在 `.sessions/` 目录下)。
+    *   在 [`search_bot/bot.py`](search_bot/bot.py:0) 中成功实现了 `SearchBot` 类。
+    *   该类负责初始化 Telethon 客户端 (使用 Bot Token 进行认证，会话名为 `search_bot.session`，存储在 `.sessions/` 目录下的)。
     *   从 `ConfigManager` 安全获取 `API_ID`, `API_HASH`, `BOT_TOKEN`。
-    *   成功注册了来自 [`search_bot/command_handlers.py`](search_bot/command_handlers.py) 和 [`search_bot/callback_query_handlers.py`](search_bot/callback_query_handlers.py) 的事件处理器。
+    *   成功注册了来自 [`search_bot/command_handlers.py`](search_bot/command_handlers.py:0) 和 [`search_bot/callback_query_handlers.py`](search_bot/callback_query_handlers.py:0) 的事件处理器。
     *   实现了客户端的异步启动 (`client.start(bot_token=...)`) 和持续运行 (`client.run_until_disconnected()`) 逻辑。
     *   包含了必要的日志记录、错误处理 (如配置缺失、认证失败) 和优雅关闭逻辑。
-*   **详细日志:** 完整的需求分析、设计思路、实现细节、代码审查、潜在优化点和测试注意事项已记录在 [`memory-bank/activeContext.md`](memory-bank/activeContext.md) (版本：阶段1 - `search_bot/bot.py` 开发)。
+*   **详细日志:** 完整的需求分析、设计思路、实现细节、代码审查、潜在优化点和测试注意事项已记录在 [`memory-bank/activeContext.md`](memory-bank/activeContext.md:0) (版本：阶段1 - `search_bot/bot.py` 开发)。
 
 ---
 
@@ -195,23 +195,23 @@
 *   **完成时间:** 2025/5/20 下午2:24 (大致时间，基于子任务报告)
 *   **执行者:** 💻 Code Mode
 *   **主要成果:**
-    *   成功创建并实现了位于项目根目录的 [`main.py`](main.py) 文件。
+    *   成功创建并实现了位于项目根目录的 [`main.py`](main.py:0) 文件。
     *   该文件作为后端应用的统一入口，能够使用 `asyncio.gather` 并发启动 `UserBotClient` 和 `SearchBot`。
     *   配置了全局统一的日志记录系统。
     *   实现了健壮的异常处理和优雅关闭机制，能够响应 `KeyboardInterrupt` (Ctrl+C) 和系统信号 (如 SIGTERM)，确保两个 Telethon 客户端都能正确断开连接。
     *   代码结构清晰，考虑了跨平台兼容性。
-*   **详细日志:** 详细的设计方案、代码实现、优化迭代过程以及对优雅关闭机制的深入解释已记录在 [`memory-bank/activeContext.md`](memory-bank/activeContext.md) (版本：阶段1 - `main.py` 开发)。
+*   **详细日志:** 详细的设计方案、代码实现、优化迭代过程以及对优雅关闭机制的深入解释已记录在 [`memory-bank/activeContext.md`](memory-bank/activeContext.md:0) (版本：阶段1 - `main.py` 开发)。
 
 ---
 ### 调试任务: 修复 `core/meilisearch_service.py` AttributeError (已完成)
 *   **完成时间:** 2025/5/20 下午2:48 (大致时间，基于子任务报告)
 *   **执行者:** 💻 Code Mode
 *   **主要成果:**
-    *   成功修复了在 [`core/meilisearch_service.py`](core/meilisearch_service.py) 的 `ensure_index_setup` 方法中发生的 `AttributeError: 'dict' object has no attribute 'results'` 问题。
+    *   成功修复了在 [`core/meilisearch_service.py`](core/meilisearch_service.py:0) 的 `ensure_index_setup` 方法中发生的 `AttributeError: 'dict' object has no attribute 'results'` 问题。
     *   修复方案通过修改对 `self.client.get_indexes()` 返回结果的处理方式，使其能够兼容 Meilisearch Python 客户端不同版本可能返回的字典或带属性对象的数据结构。
     *   增强了代码的健壮性，能够灵活处理索引列表和索引UID的提取。
     *   添加了更详细的日志记录，以便于未来诊断类似问题。
-*   **详细日志:** 详细的问题分析、修复思路、代码实现和验证说明已记录在 [`memory-bank/activeContext.md`](memory-bank/activeContext.md) (版本：阶段1 - 调试 `core/meilisearch_service.py` AttributeError)。
+*   **详细日志:** 详细的问题分析、修复思路、代码实现和验证说明已记录在 [`memory-bank/activeContext.md`](memory-bank/activeContext.md:0) (版本：阶段1 - 调试 `core/meilisearch_service.py` AttributeError)。
 
 ---
 *(后续任务进展将在此文件下方持续更新)*
@@ -221,17 +221,17 @@
 *   **完成时间:** 2025/5/20 下午3:18 (大致时间，基于子任务报告)
 *   **执行者:** 💻 Code Mode
 *   **主要成果:**
-    *   **Userbot 功能集成:** 成功修改了 [`user_bot/client.py`](user_bot/client.py) 中的 `UserBotClient` 类，使其在成功登录后能够：
-        *   注册来自 [`user_bot.event_handlers`](user_bot/event_handlers.py) 的事件处理器 (`handle_new_message`, `handle_message_edited`)，以实时监听和处理新消息及编辑消息。
-        *   执行一次初始的历史消息同步，调用 [`user_bot.history_syncer`](user_bot/history_syncer.py) 中的 `initial_sync_all_whitelisted_chats` 函数同步所有白名单聊天记录。
+    *   **Userbot 功能集成:** 成功修改了 [`user_bot/client.py`](user_bot/client.py:0) 中的 `UserBotClient` 类，使其在成功登录后能够：
+        *   注册来自 [`user_bot.event_handlers`](user_bot/event_handlers.py:0) 的事件处理器 (`handle_new_message`, `handle_message_edited`)，以实时监听和处理新消息及编辑消息。
+        *   执行一次初始的历史消息同步，调用 [`user_bot.history_syncer`](user_bot/history_syncer.py:0) 中的 `initial_sync_all_whitelisted_chats` 函数同步所有白名单聊天记录。
     *   **依赖注入改进:** 调整了相关模块 (`event_handlers.py`, `history_syncer.py`) 以更好地支持依赖注入，同时保持了向后兼容性。
-    *   **主程序适配:** 更新了 [`main.py`](main.py) 以调用 `UserBotClient` 的新 `run()` 方法，确保客户端持续运行。
+    *   **主程序适配:** 更新了 [`main.py`](main.py:0) 以调用 `UserBotClient` 的新 `run()` 方法，确保客户端持续运行。
     *   **问题修复:** 在集成过程中，识别并成功修复了以下问题：
-        1.  **循环导入问题:** 解决了 [`user_bot/client.py`](user_bot/client.py) 和 [`user_bot/history_syncer.py`](user_bot/history_syncer.py) 之间的循环导入，通过在 `history_syncer.py` 中使用类型提示字符串和延迟导入实现。
+        1.  **循环导入问题:** 解决了 [`user_bot/client.py`](user_bot/client.py:0) 和 [`user_bot/history_syncer.py`](user_bot/history_syncer.py:0) 之间的循环导入，通过在 `history_syncer.py` 中使用类型提示字符串和延迟导入实现。
         2.  **Meilisearch API 兼容性问题:** 增强了对 Meilisearch Python SDK 不同版本返回结果（`dict` vs `TaskInfo` 对象）的处理，确保了代码的兼容性和健壮性。
-        3.  **Meilisearch 主键推断问题:** 修改了索引创建逻辑，在 [`core/meilisearch_service.py`](core/meilisearch_service.py) 中为 Meilisearch 索引显式指定 `id` 作为主键，解决了因多个 `id` 后缀字段导致的主键推断失败问题。
-        4.  **Telegram 消息链接生成问题:** 修复了 [`user_bot/utils.py`](user_bot/utils.py) 中 `generate_message_link` 函数生成链接时包含多余 "100" 前缀的问题。
-*   **详细日志:** 详细的分析、设计、实现、问题诊断和修复过程已记录在 [`memory-bank/activeContext.md`](memory-bank/activeContext.md) (版本：阶段1 - 任务 1.13 `user_bot/client.py` 集成与调试)。
+        3.  **Meilisearch 主键推断问题:** 修改了索引创建逻辑，在 [`core/meilisearch_service.py`](core/meilisearch_service.py:0) 中为 Meilisearch 索引显式指定 `id` 作为主键，解决了因多个 `id` 后缀字段导致的主键推断失败问题。
+        4.  **Telegram 消息链接生成问题:** 修复了 [`user_bot/utils.py`](user_bot/utils.py:0) 中 `generate_message_link` 函数生成链接时包含多余 "100" 前缀的问题。
+*   **详细日志:** 详细的分析、设计、实现、问题诊断和修复过程已记录在 [`memory-bank/activeContext.md`](memory-bank/activeContext.md:0) (版本：阶段1 - 任务 1.13 `user_bot/client.py` 集成与调试)。
 ---
 
 ### 任务 1.13: 后端 MVP 集成测试与调试 (已完成)
@@ -244,17 +244,17 @@
 *   **完成时间:** 2025/5/20 下午3:18 (大致时间，基于子任务报告)
 *   **执行者:** 💻 Code Mode
 *   **主要成果:**
-    *   **Userbot 功能集成:** 成功修改了 [`user_bot/client.py`](user_bot/client.py) 中的 `UserBotClient` 类，使其在成功登录后能够：
-        *   注册来自 [`user_bot.event_handlers`](user_bot/event_handlers.py) 的事件处理器 (`handle_new_message`, `handle_message_edited`)，以实时监听和处理新消息及编辑消息。
-        *   执行一次初始的历史消息同步，调用 [`user_bot.history_syncer`](user_bot/history_syncer.py) 中的 `initial_sync_all_whitelisted_chats` 函数同步所有白名单聊天记录。
+    *   **Userbot 功能集成:** 成功修改了 [`user_bot/client.py`](user_bot/client.py:0) 中的 `UserBotClient` 类，使其在成功登录后能够：
+        *   注册来自 [`user_bot.event_handlers`](user_bot/event_handlers.py:0) 的事件处理器 (`handle_new_message`, `handle_message_edited`)，以实时监听和处理新消息及编辑消息。
+        *   执行一次初始的历史消息同步，调用 [`user_bot.history_syncer`](user_bot/history_syncer.py:0) 中的 `initial_sync_all_whitelisted_chats` 函数同步所有白名单聊天记录。
     *   **依赖注入改进:** 调整了相关模块 (`event_handlers.py`, `history_syncer.py`) 以更好地支持依赖注入，同时保持了向后兼容性。
-    *   **主程序适配:** 更新了 [`main.py`](main.py) 以调用 `UserBotClient` 的新 `run()` 方法，确保客户端持续运行。
+    *   **主程序适配:** 更新了 [`main.py`](main.py:0) 以调用 `UserBotClient` 的新 `run()` 方法，确保客户端持续运行。
     *   **问题修复:** 在集成过程中，识别并成功修复了以下问题：
-        1.  **循环导入问题:** 解决了 [`user_bot/client.py`](user_bot/client.py) 和 [`user_bot/history_syncer.py`](user_bot/history_syncer.py) 之间的循环导入，通过在 `history_syncer.py` 中使用类型提示字符串和延迟导入实现。
+        1.  **循环导入问题:** 解决了 [`user_bot/client.py`](user_bot/client.py:0) 和 [`user_bot/history_syncer.py`](user_bot/history_syncer.py:0) 之间的循环导入，通过在 `history_syncer.py` 中使用类型提示字符串和延迟导入实现。
         2.  **Meilisearch API 兼容性问题:** 增强了对 Meilisearch Python SDK 不同版本返回结果（`dict` vs `TaskInfo` 对象）的处理，确保了代码的兼容性和健壮性。
-        3.  **Meilisearch 主键推断问题:** 修改了索引创建逻辑，在 [`core/meilisearch_service.py`](core/meilisearch_service.py) 中为 Meilisearch 索引显式指定 `id` 作为主键，解决了因多个 `id` 后缀字段导致的主键推断失败问题。
-        4.  **Telegram 消息链接生成问题:** 修复了 [`user_bot/utils.py`](user_bot/utils.py) 中 `generate_message_link` 函数生成链接时包含多余 "100" 前缀的问题。
-*   **详细日志:** 详细的分析、设计、实现、问题诊断和修复过程已记录在 [`memory-bank/activeContext.md`](memory-bank/activeContext.md) (版本：阶段1 - 任务 1.13 `user_bot/client.py` 集成与调试)。
+        3.  **Meilisearch 主键推断问题:** 修改了索引创建逻辑，在 [`core/meilisearch_service.py`](core/meilisearch_service.py:0) 中为 Meilisearch 索引显式指定 `id` 作为主键，解决了因多个 `id` 后缀字段导致的主键推断失败问题。
+        4.  **Telegram 消息链接生成问题:** 修复了 [`user_bot/utils.py`](user_bot/utils.py:0) 中 `generate_message_link` 函数生成链接时包含多余 "100" 前缀的问题。
+*   **详细日志:** 详细的分析、设计、实现、问题诊断和修复过程已记录在 [`memory-bank/activeContext.md`](memory-bank/activeContext.md:0) (版本：阶段1 - 任务 1.13 `user_bot/client.py` 集成与调试)。
 ---
 
 ### 任务 1.13: 后端 MVP 集成测试与调试 (已完成)
@@ -349,5 +349,30 @@
     *   **兼容性处理:** 对代码进行了重构，确保应用在非 Telegram 环境下（如普通浏览器）也能优雅降级并正常运行，避免了因 SDK 不可用导致的白屏或错误。
     *   更新了相关组件 (`App.jsx`, `SearchPage.jsx`, `SearchBar.jsx`, `ResultsList.jsx`, `ResultItem.jsx`) 以使用新的 `useTelegramSDK` Hook，并应用了 SDK 功能。
 *   **详细日志:** 详细的实现步骤、代码片段、遇到的问题（如非TMA环境兼容性）及其解决方案已记录在 [`memory-bank/activeContext.md`](memory-bank/activeContext.md:0) (版本：阶段 2 - 任务 4 前端与 TMA SDK 集成)。
+
+---
+## 阶段 3: 前后端协同开发、优化与部署准备
+
+### 任务 3.1 (部分): 后端历史消息同步功能增强 (已完成)
+*   **完成时间:** 2025/5/20 下午11:49 (用户确认时间)
+*   **执行者:** 💻 Code Mode
+*   **主要成果:**
+    *   **持久化存储同步点:**
+        *   在 [`core/config_manager.py`](core/config_manager.py:0) 中创建了 `SyncPointManager` 类。
+        *   使用 JSON 文件 (`sync_points.json`) 存储聊天的最后同步点 (message_id, timestamp)。
+        *   提供了完整的 CRUD 操作接口。
+    *   **增量更新机制:**
+        *   修改了 [`user_bot/history_syncer.py`](user_bot/history_syncer.py:0) 中的同步逻辑。
+        *   增加了 `incremental` 参数控制是否启用增量同步。
+        *   实现了基于最后同步点的智能增量拉取，避免重复索引消息。
+    *   **时间段缓存功能:**
+        *   添加了 `date_from` 和 `date_to` 参数支持时间范围过滤。
+        *   创建了 `sync_chat_history_by_date_range` 便捷函数。
+        *   优化了日期过滤逻辑，可与增量同步结合使用。
+    *   **健壮性与兼容性:**
+        *   保留向后兼容性，所有新参数都有合理默认值。
+        *   完善了错误处理和日志记录。
+        *   编写了详细单元测试 ([`tests/unit/test_history_syncer.py`](tests/unit/test_history_syncer.py:0)) 验证功能正确性。
+*   **详细日志:** 详细的实现过程和设计考虑已记录在 [`memory-bank/activeContext.md`](memory-bank/activeContext.md:0) (版本：阶段 3 - 任务 1.1 后端历史消息同步增强)。
 
 ---

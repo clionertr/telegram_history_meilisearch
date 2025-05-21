@@ -12,6 +12,7 @@ import logging
 import asyncio
 from pathlib import Path
 from typing import Optional
+import asyncio
 
 from telethon import TelegramClient
 from telethon.errors import ApiIdInvalidError, AuthKeyUnregisteredError
@@ -36,13 +37,16 @@ class SearchBot:
     注册事件处理器并启动客户端服务。
     """
     
-    def __init__(self, session_name: str = "search_bot") -> None:
+    def __init__(self, session_name: str = "search_bot", userbot_restart_event: Optional[asyncio.Event] = None) -> None:
         """
         初始化 Search Bot 客户端
         
         Args:
             session_name: 会话文件名，默认为 "search_bot"
+            userbot_restart_event: User Bot 重启事件，用于重启 User Bot
         """
+        # 存储User Bot重启事件
+        self.userbot_restart_event = userbot_restart_event
         # 确保会话目录存在
         self._ensure_sessions_dir_exists()
         
@@ -126,7 +130,8 @@ class SearchBot:
             client=self.client,
             meilisearch_service=self.meilisearch_service,
             config_manager=self.config_manager,
-            admin_ids=self.admin_ids
+            admin_ids=self.admin_ids,
+            userbot_restart_event=self.userbot_restart_event
         )
         
         self.callback_query_handlers = CallbackQueryHandlers(
