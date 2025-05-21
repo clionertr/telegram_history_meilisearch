@@ -107,9 +107,67 @@ class CommandHandlers:
             self.restart_userbot_command,
             events.NewMessage(pattern=r"^/restart_userbot$")
         )
+
+        # 新增：处理普通文本消息作为搜索（应在所有特定命令之后注册）
+        self.client.add_event_handler(
+            self.handle_plain_text_message,
+            events.NewMessage(func=self._is_plain_text_and_not_command)
+        )
         
-        logger.info("已注册所有命令处理函数")
+        logger.info("已注册所有命令处理函数，包括普通文本搜索处理器")
     
+    def _is_plain_text_and_not_command(self, event) -> bool:
+        """
+        检查消息是否为普通文本消息，并且不是一个已知的命令。
+        只处理来自用户的消息，忽略频道广播等。
+        """
+        # 确保消息来自用户 (不是频道自动发布等)
+        if not event.is_private and not event.is_group: # 简单判断，可根据需求调整
+             if event.chat and hasattr(event.chat, 'broadcast') and event.chat.broadcast:
+                 return False # 是频道广播
+
+        if not event.message or not event.message.text:
+            return False # 没有文本内容 (例如图片、贴纸)
+        
+        text = event.message.text.strip()
+        if not text: # 消息为空或只有空格
+            return False
+
+        # 检查是否以已知命令前缀开头
+        # 注意：这里的命令列表应该与 register_handlers 中注册的命令保持一致
+        known_commands_patterns = [
+            r"^/start$",
+            r"^/help$",
+            r"^/search(?:\s+(.+))?$",
+            r"^/add_whitelist(?:\s+(-?\d+))?$",
+            r"^/remove_whitelist(?:\s+(-?\d+))?$",
+            r"^/set_userbot_config(?:\s+(\S+))?(?:\s+(.+))?$",
+            r"^/view_userbot_config$",
+            r"^/restart_userbot$"
+        ]
+        
+        for pattern in known_commands_patterns:
+            if re.match(pattern, text):
+                return False # 匹配已知命令格式
+
+        # 进一步排除任何以 / 开头的消息，以防有未明确列出的命令
+        if text.startswith('/'):
+            return False
+            
+        return True # 是普通文本消息，且不是已知命令
+
+    async def handle_plain_text_message(self, event) -> None:
+        """
+        处理普通文本消息，将其作为搜索查询。
+        """
+        query = event.message.text.strip()
+        # 确保查询不为空（虽然 _is_plain_text_and_not_command 已经检查过）
+        if not query:
+            return
+
+        logger.info(f"接收到普通文本消息，将作为搜索查询: '{query}' from user {(await event.get_sender()).id}")
+        await self._perform_search(event, query, is_direct_search=True)
+
     async def is_admin(self, event) -> bool:
         """
         检查用户是否为管理员
@@ -176,25 +234,16 @@ class CommandHandlers:
             logger.error(f"处理 /help 命令时出错: {e}")
             await event.respond("😕 获取帮助信息时出现错误，请稍后再试。")
     
-    async def search_command(self, event) -> None:
+    async def _perform_search(self, event, query: str, is_direct_search: bool = False) -> None:
         """
-        处理 /search 命令
-        
-        执行搜索并返回结果
+        执行搜索操作并回复结果。
         
         Args:
-            event: Telethon 事件对象
+            event: Telethon 事件对象。
+            query: 搜索关键词。
+            is_direct_search: 是否为直接无命令搜索 (用于未来可能的提示)。
         """
         try:
-            # 获取搜索关键词
-            message_text = event.message.text
-            match = re.match(r"^/search(?:\s+(.+))?$", message_text)
-            
-            if not match or not match.group(1):
-                await event.respond("请提供搜索关键词，例如：`/search Python 教程`\n发送 `/help` 获取更多使用说明。")
-                return
-            
-            query = match.group(1).strip()
             logger.info(f"用户 {(await event.get_sender()).id} 搜索: {query}")
             
             # 解析高级搜索语法
@@ -205,8 +254,18 @@ class CommandHandlers:
                 logger.debug(f"解析后的过滤条件: {filters}")
             
             # 执行搜索
-            await event.respond("🔍 正在搜索，请稍候...")
-            
+            # 首先发送一个 "正在搜索" 的提示消息
+            try:
+                # 尝试编辑消息，如果用户快速连续发送，可能会失败
+                # 但对于命令搜索，通常是新消息，所以直接 respond
+                if event.is_reply or is_direct_search: # 假设直接搜索可能需要编辑之前的 "正在处理"
+                     await event.edit("🔍 正在搜索，请稍候...")
+                else:
+                    await event.respond("🔍 正在搜索，请稍候...")
+            except Exception: # pylint: disable=broad-except
+                 # 如果编辑失败（例如消息太旧或权限问题），则发送新消息
+                await event.respond("🔍 正在搜索，请稍候...")
+
             # 默认参数
             page = 1
             hits_per_page = 5
@@ -229,13 +288,39 @@ class CommandHandlers:
             formatted_message, buttons = format_search_results(results, page, total_pages)
             
             # 发送结果
+            # 对于直接搜索，我们可能需要编辑之前的 "正在搜索" 消息
+            # 对于命令搜索，通常是新消息，所以直接 respond
+            # 为了简化，我们统一使用 respond，Telethon 会处理好
             await event.respond(formatted_message, buttons=buttons, parse_mode=None)
             logger.info(f"已向用户 {(await event.get_sender()).id} 发送搜索结果，共 {total_hits} 条")
-            
+
+            # TODO: （可选）如果 is_direct_search 为 True 且结果为空，可以发送提示信息
+            # if is_direct_search and total_hits == 0:
+            #     await event.respond("💡 你可以直接发送关键词进行搜索哦！如果需要帮助，请发送 /help。")
+
         except Exception as e:
-            logger.error(f"处理 /search 命令时出错: {e}")
+            logger.error(f"执行搜索时出错 (query: {query}): {e}")
             error_message = format_error_message(str(e))
             await event.respond(error_message, parse_mode=None)
+
+    async def search_command(self, event) -> None:
+        """
+        处理 /search 命令
+        
+        执行搜索并返回结果
+        
+        Args:
+            event: Telethon 事件对象
+        """
+        message_text = event.message.text
+        match = re.match(r"^/search(?:\s+(.+))?$", message_text)
+        
+        if not match or not match.group(1):
+            await event.respond("请提供搜索关键词，例如：`/search Python 教程`\n发送 `/help` 获取更多使用说明。")
+            return
+        
+        query = match.group(1).strip()
+        await self._perform_search(event, query)
     
     def _parse_advanced_syntax(self, query: str) -> Tuple[str, Dict[str, Any]]:
         """
