@@ -41,7 +41,12 @@ def create_app() -> FastAPI:
     app.add_middleware(
         CORSMiddleware,
         # 允许的源列表（域名），前端开发服务器默认在 5173 端口
-        allow_origins=["http://localhost:5173", "http://localhost:3000", "http://127.0.0.1:5173", "http://127.0.0.1:3000"],
+        allow_origins=[
+            "http://localhost:5173", "http://localhost:3000",
+            "http://127.0.0.1:5173", "http://127.0.0.1:3000",
+            "https://localhost:5173", "https://localhost:3000",
+            "https://127.0.0.1:5173", "https://127.0.0.1:3000"
+        ],
         allow_credentials=True,
         allow_methods=["*"],  # 允许所有 HTTP 方法
         allow_headers=["*"],  # 允许所有请求头
