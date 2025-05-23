@@ -239,15 +239,15 @@ class UserBotClient:
             
         return self._client
 
-    async def get_dialogs_info(self) -> list[tuple[str, int]]:
+    async def get_dialogs_info(self) -> list[tuple[str, int, str]]:
         """
         获取用户账户下的所有对话信息
         
         使用Telethon客户端的get_dialogs()功能获取所有对话，
-        并提取每个对话的名称和ID。
+        并提取每个对话的名称、ID和类型。
         
         Returns:
-            list[tuple[str, int]]: 包含(dialog_name, dialog_id)元组的列表
+            list[tuple[str, int, str]]: 包含(dialog_name, dialog_id, dialog_type)元组的列表
             
         Raises:
             RuntimeError: 如果客户端未初始化或未连接
@@ -267,14 +267,26 @@ class UserBotClient:
             # 使用Telethon的get_dialogs()方法获取所有对话
             dialogs = await self._client.get_dialogs()
             
-            # 提取对话名称和ID
+            # 提取对话名称、ID和类型
             dialogs_info = []
             for dialog in dialogs:
                 dialog_name = dialog.name or "未知对话"
                 dialog_id = dialog.id
-                dialogs_info.append((dialog_name, dialog_id))
+                dialog_type_str = "unknown" # 默认为unknown
+
+                if dialog.is_user:
+                    dialog_type_str = "user"
+                elif dialog.is_group: # 普通群组
+                    dialog_type_str = "group"
+                elif dialog.is_channel:
+                    if hasattr(dialog.entity, 'megagroup') and dialog.entity.megagroup: # 超级群组
+                        dialog_type_str = "group"
+                    else: # 广播频道
+                        dialog_type_str = "channel"
                 
-            logger.info(f"成功获取 {len(dialogs_info)} 个对话信息")
+                dialogs_info.append((dialog_name, dialog_id, dialog_type_str))
+                
+            logger.info(f"成功获取 {len(dialogs_info)} 个对话信息（包含类型）")
             logger.debug(f"对话列表: {dialogs_info}")
             
             return dialogs_info

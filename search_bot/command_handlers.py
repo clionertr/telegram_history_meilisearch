@@ -839,35 +839,54 @@ class CommandHandlers:
             # 发送处理中的消息
             status_message = await event.respond("🔍 正在获取对话列表，请稍候...")
             
+            dialogs_per_page = 15  # 每页显示的对话数量，可以根据需要调整
+            current_page = 1 # 初始请求总是第一页
+
             # 获取 UserBotClient 实例
             try:
                 userbot_client = UserBotClient()
                 
                 # 调用获取对话信息的方法
-                dialogs_info = await userbot_client.get_dialogs_info()
+                # 注意：这里获取的是完整的对话列表
+                all_dialogs_info = await userbot_client.get_dialogs_info()
                 
-                # 格式化对话列表
-                formatted_message = format_dialogs_list(dialogs_info)
+                if not all_dialogs_info:
+                    await status_message.edit("📭 **对话列表为空**\n\n当前账户下没有找到任何对话。", parse_mode='md')
+                    logger.info(f"用户 {sender_id} 的对话列表为空")
+                    return
+
+                total_dialogs = len(all_dialogs_info)
+                total_pages = (total_dialogs + dialogs_per_page - 1) // dialogs_per_page
+                if total_pages == 0: # Handle case with 0 dialogs, though caught by `if not all_dialogs_info`
+                    total_pages = 1
+
+                # 格式化对话列表（第一页）
+                formatted_message, buttons = format_dialogs_list(
+                    dialogs_info=all_dialogs_info,
+                    current_page=current_page,
+                    total_pages=total_pages,
+                    items_per_page=dialogs_per_page
+                )
                 
                 # 更新消息
-                await status_message.edit(formatted_message, parse_mode='md')
+                await status_message.edit(formatted_message, buttons=buttons, parse_mode='md')
                 
                 # 记录日志
-                logger.info(f"已向用户 {sender_id} 发送对话列表，共 {len(dialogs_info)} 个对话")
+                logger.info(f"已向用户 {sender_id} 发送对话列表第 {current_page}/{total_pages} 页，共 {total_dialogs} 个对话")
                 
-                # 在日志中打印对话信息（用于调试）
-                logger.info(f"对话列表详情: {dialogs_info}")
+                # 在日志中打印对话信息（用于调试，可以考虑只打印部分或摘要）
+                # logger.debug(f"完整对话列表详情: {all_dialogs_info}")
                 
             except RuntimeError as e:
                 # UserBot 客户端相关错误
                 error_msg = "⚠️ User Bot 未正确初始化或未连接，无法获取对话列表。\n\n请联系管理员检查 User Bot 状态。"
-                await status_message.edit(error_msg)
+                await status_message.edit(error_msg, parse_mode='md')
                 logger.error(f"UserBot 客户端错误: {e}")
                 
             except Exception as e:
                 # 其他错误
                 error_msg = f"⚠️ 获取对话列表时发生错误: {str(e)}\n\n请稍后再试或联系管理员。"
-                await status_message.edit(error_msg)
+                await status_message.edit(error_msg, parse_mode='md')
                 logger.error(f"获取对话列表时发生未知错误: {e}", exc_info=True)
                 
         except Exception as e:

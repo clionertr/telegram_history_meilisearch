@@ -280,25 +280,74 @@ class TestUserBotClient(unittest.TestCase):
     @patch('user_bot.client.TelegramClient')
     def test_get_dialogs_info_success(self, mock_telegram_client, mock_meilisearch_service):
         """
-        测试成功获取对话信息的情况
+        测试成功获取对话信息的情况（包含类型）
         """
         # 创建模拟的对话对象
-        mock_dialog1 = MagicMock()
-        mock_dialog1.name = "Test Chat 1"
-        mock_dialog1.id = 123456789
-        
-        mock_dialog2 = MagicMock()
-        mock_dialog2.name = "Test Chat 2"
-        mock_dialog2.id = 987654321
-        
-        mock_dialog3 = MagicMock()
-        mock_dialog3.name = None  # 测试名称为空的情况
-        mock_dialog3.id = 555666777
+        # 1. User
+        mock_dialog_user = MagicMock()
+        mock_dialog_user.name = "User One"
+        mock_dialog_user.id = 10001
+        mock_dialog_user.is_user = True
+        mock_dialog_user.is_group = False
+        mock_dialog_user.is_channel = False
+        mock_dialog_user.entity = MagicMock() # Ensure entity exists
+
+        # 2. Group
+        mock_dialog_group = MagicMock()
+        mock_dialog_group.name = "Group Alpha"
+        mock_dialog_group.id = 20002
+        mock_dialog_group.is_user = False
+        mock_dialog_group.is_group = True
+        mock_dialog_group.is_channel = False
+        mock_dialog_group.entity = MagicMock()
+
+        # 3. Channel (Broadcast)
+        mock_dialog_channel_broadcast = MagicMock()
+        mock_dialog_channel_broadcast.name = "Channel Beta"
+        mock_dialog_channel_broadcast.id = 30003
+        mock_dialog_channel_broadcast.is_user = False
+        mock_dialog_channel_broadcast.is_group = False
+        mock_dialog_channel_broadcast.is_channel = True
+        mock_dialog_channel_broadcast.entity = MagicMock(megagroup=False) # Broadcast channel
+
+        # 4. Channel (Supergroup/Megagroup)
+        mock_dialog_channel_supergroup = MagicMock()
+        mock_dialog_channel_supergroup.name = "Supergroup Gamma"
+        mock_dialog_channel_supergroup.id = 40004
+        mock_dialog_channel_supergroup.is_user = False
+        mock_dialog_channel_supergroup.is_group = False # is_group might be False for supergroups via get_dialogs
+        mock_dialog_channel_supergroup.is_channel = True
+        mock_dialog_channel_supergroup.entity = MagicMock(megagroup=True) # Supergroup
+
+        # 5. Unknown type (e.g., all flags false)
+        mock_dialog_unknown = MagicMock()
+        mock_dialog_unknown.name = "Mystery Dialog"
+        mock_dialog_unknown.id = 50005
+        mock_dialog_unknown.is_user = False
+        mock_dialog_unknown.is_group = False
+        mock_dialog_unknown.is_channel = False
+        mock_dialog_unknown.entity = MagicMock()
+
+        # 6. Dialog with None name
+        mock_dialog_noname = MagicMock()
+        mock_dialog_noname.name = None
+        mock_dialog_noname.id = 60006
+        mock_dialog_noname.is_user = True # Let's make it a user for simplicity
+        mock_dialog_noname.is_group = False
+        mock_dialog_noname.is_channel = False
+        mock_dialog_noname.entity = MagicMock()
         
         # 设置模拟客户端
         mock_client = MagicMock()
         mock_client.is_connected.return_value = True
-        mock_client.get_dialogs = AsyncMock(return_value=[mock_dialog1, mock_dialog2, mock_dialog3])
+        mock_client.get_dialogs = AsyncMock(return_value=[
+            mock_dialog_user,
+            mock_dialog_group,
+            mock_dialog_channel_broadcast,
+            mock_dialog_channel_supergroup,
+            mock_dialog_unknown,
+            mock_dialog_noname
+        ])
         mock_telegram_client.return_value = mock_client
         
         # 创建UserBotClient实例
@@ -310,9 +359,12 @@ class TestUserBotClient(unittest.TestCase):
             
             # 验证返回结果
             expected = [
-                ("Test Chat 1", 123456789),
-                ("Test Chat 2", 987654321),
-                ("未知对话", 555666777)  # 名称为空时应该使用默认值
+                ("User One", 10001, "user"),
+                ("Group Alpha", 20002, "group"),
+                ("Channel Beta", 30003, "channel"),
+                ("Supergroup Gamma", 40004, "group"), # Supergroups are treated as 'group'
+                ("Mystery Dialog", 50005, "unknown"),
+                ("未知对话", 60006, "user")  # 名称为空时应该使用默认值, type is user
             ]
             self.assertEqual(result, expected)
             

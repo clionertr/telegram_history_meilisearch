@@ -56,30 +56,42 @@ class CallbackQueryHandlers:
         # 分页按钮回调处理 - New pattern for base64 encoded full query
         self.client.add_event_handler(
             self.pagination_callback,
-            events.CallbackQuery(pattern=r"^search_page:(\d+):(.+)$") # Updated pattern
+            events.CallbackQuery(pattern=r"^search_page:(\d+):(.+)$") # Updated pattern for search
+        )
+
+        # 对话列表分页按钮回调处理
+        self.client.add_event_handler(
+            self.dialog_pagination_callback,
+            events.CallbackQuery(pattern=r"^dialog_page:(\d+)$")
         )
         
         # "noop" 按钮回调处理（当前页码按钮，不执行任何操作）
+        # Generic noop for search
         self.client.add_event_handler(
-            self.noop_callback,
+            self.noop_callback, # Can be reused if message is generic
             events.CallbackQuery(pattern=r"^noop$")
         )
+        # Specific noop for dialog page button, if different message is desired
+        self.client.add_event_handler(
+            self.noop_dialog_callback,
+            events.CallbackQuery(pattern=r"^noop_dialog_page$")
+        )
         
-        logger.info("已注册所有回调查询处理函数")
+        logger.info("已注册所有回调查询处理函数, 包括对话列表分页")
 
     async def pagination_callback(self, event: CallbackQuery.Event) -> None:
         """
-        处理分页按钮的回调查询 (search_page:<page_num>:<original_query_b64>)
+        处理搜索结果分页按钮的回调查询 (search_page:<page_num>:<original_query_b64>)
         """
         try:
             sender = await event.get_sender()
             user_id = sender.id
             data = event.data.decode('utf-8')
-            logger.debug(f"收到分页回调: {data}, 用户: {user_id}")
+            logger.debug(f"收到搜索分页回调: {data}, 用户: {user_id}")
 
             match = re.match(r"^search_page:(\d+):(.+)$", data)
             if not match:
-                logger.warning(f"无效的回调数据格式: {data}")
+                logger.warning(f"无效的搜索分页回调数据格式: {data}")
                 await event.answer("无效的请求格式", alert=True)
                 return
 
@@ -93,13 +105,13 @@ class CallbackQueryHandlers:
                 await event.answer("无法解析查询参数", alert=True)
                 return
 
-            logger.info(f"处理分页请求: 页码={page}, 原始查询='{original_query}', 用户={user_id}")
+            logger.info(f"处理搜索分页请求: 页码={page}, 原始查询='{original_query}', 用户={user_id}")
             
             # Use command_handler methods to parse and build filters
             parsed_query, filters_dict = self.command_handler._parse_advanced_syntax(original_query) # pylint: disable=protected-access
             meili_filters = self.command_handler._build_meilisearch_filters(filters_dict) if filters_dict else None # pylint: disable=protected-access
 
-            hits_per_page = 5  # Standard items per page
+            hits_per_page = 5  # Standard items per page for search
             sort_options = ["date:desc"]
 
             # Check cache
@@ -109,7 +121,7 @@ class CallbackQueryHandlers:
 
             if cached_entry:
                 cached_results, is_partial, total_hits_from_cache, fetch_ts = cached_entry
-                logger.info(f"分页缓存命中 for '{parsed_query}'. Partial: {is_partial}, Total Hits: {total_hits_from_cache}")
+                logger.info(f"搜索分页缓存命中 for '{parsed_query}'. Partial: {is_partial}, Total Hits: {total_hits_from_cache}")
 
                 if not is_partial: # Full data in cache
                     results_to_format = {
@@ -155,7 +167,7 @@ class CallbackQueryHandlers:
                                 return
             
             # Cache miss or partial data not sufficient, and async fetch not helpful. Fetch directly.
-            logger.info(f"分页缓存未命中/不足 for '{parsed_query}', page {page}. 直接从 MeiliSearch 获取。")
+            logger.info(f"搜索分页缓存未命中/不足 for '{parsed_query}', page {page}. 直接从 MeiliSearch 获取。")
             await event.answer("正在加载新页面...") # Toast notification
             
             page_specific_results_obj = await self.command_handler._get_results_from_meili( # pylint: disable=protected-access
@@ -166,35 +178,99 @@ class CallbackQueryHandlers:
             
             formatted_msg, buttons = format_search_results(page_specific_results_obj, page, total_pages, query_original=original_query)
             await event.edit(formatted_msg, buttons=buttons, parse_mode='md')
-            # No event.answer() here as the edit itself is a confirmation if it doesn't error.
-            # If an error occurs during edit, the except block will handle event.answer.
 
         except Exception as e:
-            logger.error(f"处理分页回调时出错: {e}", exc_info=True)
+            logger.error(f"处理搜索分页回调时出错: {e}", exc_info=True)
             try:
-                # Try to answer with an alert, this is more likely to be seen by the user.
-                await event.answer(f"加载页面出错: {str(e)[:190]}", alert=True) # Max 200 chars for answer
-            except Exception: # pylint: disable=broad-except
-                # Fallback to editing message if answer fails (e.g., if callback already answered)
+                await event.answer(f"加载页面出错: {str(e)[:190]}", alert=True)
+            except Exception:
                 try:
                     error_text = format_error_message(f"加载页面时出错: {str(e)}")
                     await event.edit(error_text, parse_mode='md')
-                except Exception: # pylint: disable=broad-except
-                    logger.error("无法通过 answer 或 edit 通知用户分页错误")
+                except Exception:
+                    logger.error("无法通过 answer 或 edit 通知用户搜索分页错误")
 
-    async def noop_callback(self, event: CallbackQuery.Event) -> None:
+    async def dialog_pagination_callback(self, event: CallbackQuery.Event) -> None:
         """
-        处理 noop 回调 (不执行任何操作)
-        
-        用于当前页码按钮，仅显示提示但不执行任何操作
-        
-        Args:
-            event: Telethon CallbackQuery 事件对象
+        处理对话列表分页按钮的回调查询 (dialog_page:<page_num>)
         """
         try:
-            await event.answer("这是当前页面", alert=False)
+            sender = await event.get_sender()
+            user_id = sender.id
+            data = event.data.decode('utf-8')
+            logger.debug(f"收到对话列表分页回调: {data}, 用户: {user_id}")
+
+            match = re.match(r"^dialog_page:(\d+)$", data)
+            if not match:
+                logger.warning(f"无效的对话列表分页回调数据格式: {data}")
+                await event.answer("无效的请求格式", alert=True)
+                return
+
+            page = int(match.group(1))
+            logger.info(f"处理对话列表分页请求: 页码={page}, 用户={user_id}")
+            
+            await event.answer("正在加载对话列表页面...") # Toast notification
+
+            # Re-fetch dialogs (or use a cached version if implemented later)
+            # For now, always re-fetch the full list.
+            from user_bot.client import UserBotClient # Local import to avoid potential init issues if module is complex
+            from search_bot.message_formatters import format_dialogs_list # Ensure it's available
+
+            userbot_client = UserBotClient() # Get singleton instance
+            all_dialogs_info = await userbot_client.get_dialogs_info()
+
+            if not all_dialogs_info:
+                await event.edit("📭 **对话列表为空**\n\n当前账户下没有找到任何对话。", parse_mode='md')
+                logger.info(f"用户 {user_id} 的对话列表在分页时变为空")
+                return
+
+            dialogs_per_page = 15 # Should be consistent with CommandHandlers
+            total_dialogs = len(all_dialogs_info)
+            total_pages = (total_dialogs + dialogs_per_page - 1) // dialogs_per_page
+            if total_pages == 0: total_pages = 1
+
+
+            if page < 1 or page > total_pages:
+                logger.warning(f"请求的对话页码 {page} 超出范围 (1-{total_pages})")
+                await event.answer("请求的页码无效", alert=True)
+                # Optionally, edit message to show first/last page or an error
+                # For now, just answer and don't change the message.
+                return
+
+            formatted_msg, buttons = format_dialogs_list(
+                dialogs_info=all_dialogs_info,
+                current_page=page,
+                total_pages=total_pages,
+                items_per_page=dialogs_per_page
+            )
+            await event.edit(formatted_msg, buttons=buttons, parse_mode='md')
+            # No event.answer() here as edit is confirmation
+
         except Exception as e:
-            logger.error(f"处理 noop 回调时出错: {e}")
+            logger.error(f"处理对话列表分页回调时出错: {e}", exc_info=True)
+            try:
+                await event.answer(f"加载对话页面出错: {str(e)[:190]}", alert=True)
+            except Exception:
+                try:
+                    # Use a generic error formatter if available, or simple text
+                    await event.edit(f"⚠️ 加载对话页面时发生错误: {str(e)}", parse_mode='md')
+                except Exception:
+                    logger.error("无法通过 answer 或 edit 通知用户对话列表分页错误")
+
+    async def noop_callback(self, event: CallbackQuery.Event) -> None:
+        """处理通用 noop 回调 (不执行任何操作)"""
+        try:
+            await event.answer("这是当前页面", alert=False) # Generic message
+        except Exception as e:
+            logger.error(f"处理通用 noop 回调时出错: {e}")
+
+    async def noop_dialog_callback(self, event: CallbackQuery.Event) -> None:
+        """处理对话列表 noop 回调 (不执行任何操作)"""
+        try:
+            # You could customize the message for dialogs if needed
+            await event.answer("这是当前对话列表页面", alert=False)
+        except Exception as e:
+            logger.error(f"处理对话 noop 回调时出错: {e}")
 
 
 # 辅助函数：创建回调查询处理器并注册到客户端

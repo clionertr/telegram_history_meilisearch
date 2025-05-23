@@ -289,29 +289,48 @@ def format_help_message() -> str:
     return help_text.strip()
 
 
-def format_dialogs_list(dialogs_info: List[Tuple[str, int]]) -> str:
+def format_dialogs_list(
+    dialogs_info: List[Tuple[str, int, str]],
+    current_page: int,
+    total_pages: int,
+    items_per_page: int = 10  # Default items per page for dialogs
+) -> Tuple[str, Optional[List[List[Button]]]]:
     """
-    格式化对话列表为用户友好的文本
+    格式化对话列表为用户友好的文本，并支持分页。
     
     将从 UserBotClient 获取的对话信息格式化为用户友好的文本，
-    包括对话名称和ID。
+    包括对话名称、ID和类型，并生成分页按钮。
     
     Args:
-        dialogs_info: 包含 (dialog_name, dialog_id) 元组的列表
+        dialogs_info: 包含 (dialog_name, dialog_id, dialog_type) 元组的完整列表
+        current_page: 当前页码，从 1 开始
+        total_pages: 总页数
+        items_per_page: 每页显示的对话数量
         
     Returns:
-        str: 格式化后的对话列表文本
+        Tuple[str, Optional[List[List[Button]]]]:
+            - 格式化后的消息文本
+            - 分页按钮列表（如果有分页）或 None（如果没有分页）
     """
     if not dialogs_info:
-        return "📭 **对话列表为空**\n\n当前账户下没有找到任何对话。"
+        return "📭 **对话列表为空**\n\n当前账户下没有找到任何对话。", None
+    
+    total_dialogs = len(dialogs_info)
     
     # 构建消息头部
     message_parts = [
-        f"💬 **对话列表** (共 **{len(dialogs_info)}** 个对话)\n\n"
+        f"💬 **对话列表** (共 **{total_dialogs}** 个对话)\n",
+        f"📄 第 **{current_page}/{total_pages}** 页\n\n"
     ]
     
-    # 遍历对话列表，格式化每个对话
-    for index, (dialog_name, dialog_id) in enumerate(dialogs_info, 1):
+    # 计算当前页的对话范围
+    start_index = (current_page - 1) * items_per_page
+    end_index = start_index + items_per_page
+    current_page_dialogs = dialogs_info[start_index:end_index]
+    
+    # 遍历当前页的对话列表，格式化每个对话
+    for local_index, (dialog_name, dialog_id, dialog_type) in enumerate(current_page_dialogs, 1):
+        global_index = start_index + local_index # 全局索引
         # 安全处理对话名称，避免Markdown冲突
         safe_dialog_name = dialog_name or "未知对话"
         
@@ -320,32 +339,61 @@ def format_dialogs_list(dialogs_info: List[Tuple[str, int]]) -> str:
             safe_dialog_name = re.sub(pattern, replacement, safe_dialog_name)
         
         # 截取过长的对话名称
-        if len(safe_dialog_name) > 50:
-            safe_dialog_name = safe_dialog_name[:47] + "..."
+        if len(safe_dialog_name) > 35: # Adjusted length to make space for type and index
+            safe_dialog_name = safe_dialog_name[:32] + "..."
         
+        # 格式化对话类型，使其更易读
+        type_emoji_map = {
+            "user": "👤",
+            "group": "👥",
+            "channel": "📢",
+            "unknown": "❓"
+        }
+        type_display = f"{type_emoji_map.get(dialog_type, '❓')} {dialog_type.capitalize()}"
+
         # 格式化单个对话条目
         message_parts.append(
-            f"{index}. **{safe_dialog_name}**\n"
+            f"{global_index}. **{safe_dialog_name}** ({type_display})\n"
             f"   ID: `{dialog_id}`\n\n"
         )
         
-        # 如果对话数量过多，限制显示数量以避免消息过长
-        if index >= 50:  # Telegram消息长度限制
-            remaining_count = len(dialogs_info) - index
-            if remaining_count > 0:
-                message_parts.append(f"... 还有 **{remaining_count}** 个对话未显示\n\n")
-            break
-    
-    # 添加说明信息
-    message_parts.append(
-        "💡 **说明:**\n"
-        "- 对话ID可用于白名单管理命令\n"
-        "- 使用 `/add_whitelist <对话ID>` 添加到白名单\n"
-        "- 使用 `/remove_whitelist <对话ID>` 从白名单移除"
-    )
+    # 构建分页按钮 (如果需要)
+    buttons = None
+    if total_pages > 1:
+        buttons_row = []
+        
+        # 首页和上一页按钮
+        if current_page > 1:
+            buttons_row.append(Button.inline("⏮ 首页", f"dialog_page:1"))
+            buttons_row.append(Button.inline("◀️ 上一页", f"dialog_page:{current_page - 1}"))
+        
+        # 当前页/总页数按钮 (不可点击)
+        buttons_row.append(Button.inline(f"📄 {current_page}/{total_pages}", "noop_dialog_page")) # Use a specific noop
+        
+        # 下一页和末页按钮
+        if current_page < total_pages:
+            buttons_row.append(Button.inline("▶️ 下一页", f"dialog_page:{current_page + 1}"))
+            buttons_row.append(Button.inline("⏭ 末页", f"dialog_page:{total_pages}"))
+            
+        buttons = [buttons_row]
+
+        # 如果按钮超过5个，拆分为两行 (类似搜索结果)
+        if len(buttons_row) > 5:
+            nav_buttons = buttons_row[:2] + buttons_row[3:]  # 导航按钮
+            page_button = [buttons_row[2]]  # 页码按钮
+            buttons = [nav_buttons, page_button]
+            
+    # 添加说明信息 (如果是在最后一页或者总页数不多时显示，避免重复)
+    if current_page == total_pages or total_pages <=1 :
+        message_parts.append(
+            "💡 **说明:**\n"
+            "- 对话ID可用于白名单管理命令\n"
+            "- 使用 `/add_whitelist <对话ID>` 添加到白名单\n"
+            "- 使用 `/remove_whitelist <对话ID>` 从白名单移除"
+        )
     
     # 合并所有消息部分
     formatted_message = ''.join(message_parts)
     
-    logger.debug(f"已格式化对话列表，包含 {len(dialogs_info)} 个对话")
-    return formatted_message
+    logger.debug(f"已格式化对话列表第 {current_page}/{total_pages} 页，包含 {len(current_page_dialogs)} 个对话")
+    return formatted_message, buttons
