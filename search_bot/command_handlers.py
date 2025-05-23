@@ -20,7 +20,8 @@ from telethon.tl.types import User
 from core.meilisearch_service import MeiliSearchService
 from core.config_manager import ConfigManager
 from .cache_service import SearchCacheService # Added
-from search_bot.message_formatters import format_search_results, format_error_message, format_help_message
+from search_bot.message_formatters import format_search_results, format_error_message, format_help_message, format_dialogs_list
+from user_bot.client import UserBotClient
 
 # 配置日志记录器
 logger = logging.getLogger(__name__)
@@ -111,6 +112,12 @@ class CommandHandlers:
             self.restart_userbot_command,
             events.NewMessage(pattern=r"^/restart_userbot$")
         )
+        
+        # 对话列表命令
+        self.client.add_event_handler(
+            self.get_dialogs_command,
+            events.NewMessage(pattern=r"^/get_dialogs$")
+        )
 
         # 新增：处理普通文本消息作为搜索（应在所有特定命令之后注册）
         self.client.add_event_handler(
@@ -162,6 +169,7 @@ class CommandHandlers:
             r"^/set_userbot_config(?:\s+(\S+))?(?:\s+(.+))?$",
             r"^/view_userbot_config$",
             r"^/restart_userbot$",
+            r"^/get_dialogs$",
             # Add new search config commands to prevent them being treated as plain text
             r"^/view_search_config$",
             r"^/set_search_config(?:\s+(\S+))?(?:\s+(.+))?$",
@@ -813,6 +821,62 @@ class CommandHandlers:
         except Exception as e:
             logger.error(f"处理 /restart_userbot 命令时出错: {e}")
             await event.respond(f"⚠️ 重启 User Bot 时出现错误: {str(e)}")
+
+    async def get_dialogs_command(self, event) -> None:
+        """
+        处理 /get_dialogs 命令
+        
+        获取用户账户下的所有对话列表，包括对话名称和ID
+        
+        Args:
+            event: Telethon 事件对象
+        """
+        try:
+            sender = await event.get_sender()
+            sender_id = sender.id
+            logger.info(f"用户 {sender_id} 请求获取对话列表")
+            
+            # 发送处理中的消息
+            status_message = await event.respond("🔍 正在获取对话列表，请稍候...")
+            
+            # 获取 UserBotClient 实例
+            try:
+                userbot_client = UserBotClient()
+                
+                # 调用获取对话信息的方法
+                dialogs_info = await userbot_client.get_dialogs_info()
+                
+                # 格式化对话列表
+                formatted_message = format_dialogs_list(dialogs_info)
+                
+                # 更新消息
+                await status_message.edit(formatted_message, parse_mode='md')
+                
+                # 记录日志
+                logger.info(f"已向用户 {sender_id} 发送对话列表，共 {len(dialogs_info)} 个对话")
+                
+                # 在日志中打印对话信息（用于调试）
+                logger.info(f"对话列表详情: {dialogs_info}")
+                
+            except RuntimeError as e:
+                # UserBot 客户端相关错误
+                error_msg = "⚠️ User Bot 未正确初始化或未连接，无法获取对话列表。\n\n请联系管理员检查 User Bot 状态。"
+                await status_message.edit(error_msg)
+                logger.error(f"UserBot 客户端错误: {e}")
+                
+            except Exception as e:
+                # 其他错误
+                error_msg = f"⚠️ 获取对话列表时发生错误: {str(e)}\n\n请稍后再试或联系管理员。"
+                await status_message.edit(error_msg)
+                logger.error(f"获取对话列表时发生未知错误: {e}", exc_info=True)
+                
+        except Exception as e:
+            logger.error(f"处理 /get_dialogs 命令时出错: {e}", exc_info=True)
+            try:
+                await event.respond("😕 处理获取对话列表请求时出现错误，请稍后再试。")
+            except Exception:
+                # 如果连回复都失败了，只能记录日志
+                logger.error("无法发送错误回复消息")
 
     async def view_search_config_command(self, event) -> None:
         """处理 /view_search_config 命令 (管理员权限)"""

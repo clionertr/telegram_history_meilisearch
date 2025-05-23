@@ -276,6 +276,129 @@ class TestUserBotClient(unittest.TestCase):
         loop = asyncio.get_event_loop()
         loop.run_until_complete(async_test())
 
+    @patch('user_bot.client.MeiliSearchService')
+    @patch('user_bot.client.TelegramClient')
+    def test_get_dialogs_info_success(self, mock_telegram_client, mock_meilisearch_service):
+        """
+        测试成功获取对话信息的情况
+        """
+        # 创建模拟的对话对象
+        mock_dialog1 = MagicMock()
+        mock_dialog1.name = "Test Chat 1"
+        mock_dialog1.id = 123456789
+        
+        mock_dialog2 = MagicMock()
+        mock_dialog2.name = "Test Chat 2"
+        mock_dialog2.id = 987654321
+        
+        mock_dialog3 = MagicMock()
+        mock_dialog3.name = None  # 测试名称为空的情况
+        mock_dialog3.id = 555666777
+        
+        # 设置模拟客户端
+        mock_client = MagicMock()
+        mock_client.is_connected.return_value = True
+        mock_client.get_dialogs = AsyncMock(return_value=[mock_dialog1, mock_dialog2, mock_dialog3])
+        mock_telegram_client.return_value = mock_client
+        
+        # 创建UserBotClient实例
+        client = UserBotClient(self.mock_config)
+        
+        # 使用异步测试辅助方法测试get_dialogs_info方法
+        async def async_test():
+            result = await client.get_dialogs_info()
+            
+            # 验证返回结果
+            expected = [
+                ("Test Chat 1", 123456789),
+                ("Test Chat 2", 987654321),
+                ("未知对话", 555666777)  # 名称为空时应该使用默认值
+            ]
+            self.assertEqual(result, expected)
+            
+            # 验证get_dialogs被调用
+            mock_client.get_dialogs.assert_called_once()
+        
+        # 执行异步测试
+        import asyncio
+        loop = asyncio.get_event_loop()
+        loop.run_until_complete(async_test())
+
+    @patch('user_bot.client.MeiliSearchService')
+    @patch('user_bot.client.TelegramClient')
+    def test_get_dialogs_info_client_not_initialized(self, mock_telegram_client, mock_meilisearch_service):
+        """
+        测试客户端未初始化时获取对话信息的情况
+        """
+        # 创建UserBotClient实例但不设置客户端
+        client = UserBotClient(self.mock_config)
+        client._client = None  # 模拟客户端未初始化
+        
+        # 使用异步测试辅助方法测试异常情况
+        async def async_test():
+            with self.assertRaises(RuntimeError) as context:
+                await client.get_dialogs_info()
+            
+            self.assertIn("客户端未初始化", str(context.exception))
+        
+        # 执行异步测试
+        import asyncio
+        loop = asyncio.get_event_loop()
+        loop.run_until_complete(async_test())
+
+    @patch('user_bot.client.MeiliSearchService')
+    @patch('user_bot.client.TelegramClient')
+    def test_get_dialogs_info_client_not_connected(self, mock_telegram_client, mock_meilisearch_service):
+        """
+        测试客户端未连接时获取对话信息的情况
+        """
+        # 设置模拟客户端为未连接状态
+        mock_client = MagicMock()
+        mock_client.is_connected.return_value = False
+        mock_telegram_client.return_value = mock_client
+        
+        # 创建UserBotClient实例
+        client = UserBotClient(self.mock_config)
+        
+        # 使用异步测试辅助方法测试异常情况
+        async def async_test():
+            with self.assertRaises(RuntimeError) as context:
+                await client.get_dialogs_info()
+            
+            self.assertIn("客户端未连接", str(context.exception))
+        
+        # 执行异步测试
+        import asyncio
+        loop = asyncio.get_event_loop()
+        loop.run_until_complete(async_test())
+
+    @patch('user_bot.client.MeiliSearchService')
+    @patch('user_bot.client.TelegramClient')
+    def test_get_dialogs_info_api_error(self, mock_telegram_client, mock_meilisearch_service):
+        """
+        测试API调用失败时获取对话信息的情况
+        """
+        # 设置模拟客户端
+        mock_client = MagicMock()
+        mock_client.is_connected.return_value = True
+        mock_client.get_dialogs = AsyncMock(side_effect=Exception("API调用失败"))
+        mock_telegram_client.return_value = mock_client
+        
+        # 创建UserBotClient实例
+        client = UserBotClient(self.mock_config)
+        
+        # 使用异步测试辅助方法测试异常情况
+        async def async_test():
+            with self.assertRaises(Exception) as context:
+                await client.get_dialogs_info()
+            
+            self.assertIn("获取对话信息失败", str(context.exception))
+        
+        # 执行异步测试
+        import asyncio
+        loop = asyncio.get_event_loop()
+        loop.run_until_complete(async_test())
+
 
 if __name__ == '__main__':
     unittest.main()

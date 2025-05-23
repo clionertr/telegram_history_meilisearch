@@ -1,52 +1,74 @@
-# 项目决策与问题解决日志
+# 项目决策日志
 
-## 2025-05-20: 前端分页功能问题诊断与修复
+## 2025/5/19
 
-**影响模块:**
-*   前端: [`frontend/src/components/ResultsList.jsx`](frontend/src/components/ResultsList.jsx:0), [`frontend/src/store/searchStore.js`](frontend/src/store/searchStore.js:0)
-*   后端 API: [`api/routers/search.py`](api/routers/search.py:0)
-*   后端核心服务: [`core/meilisearch_service.py`](core/meilisearch_service.py:0)
+*   **决策:** 项目初始化阶段，确定使用 `uv` 作为 Python 包管理和虚拟环境工具。
+    *   **理由:** `uv` 提供了比传统 `pip` 和 `venv` 更快的性能和更一致的依赖解析。
+    *   **影响:** 更新了 `PLAN.md` 和环境搭建步骤。
 
-**问题现象:**
-用户反馈前端分页功能不正常，始终只显示1页，即使搜索结果应该有多页。
+*   **决策:** Search Bot 将使用 Telethon 而不是 `python-telegram-bot`。
+    *   **理由:** 用户明确指示，且与 User Bot 技术栈统一，便于代码复用和维护。
+    *   **影响:** 大幅修改了 `PLAN.md` 中 Search Bot 相关模块的开发计划。
 
-**诊断过程:**
+## 2025/5/20
 
-1.  **初步怀疑 (前端):**
-    *   检查前端 `searchStore.js` 中 `hitsPerPage` 设置，确认为5。
-    *   检查 `ResultsList.jsx` 分页逻辑，确认在 `totalPages <= 1` 时不显示分页控件。
-    *   **假设:** 后端返回的 `estimatedTotalHits` 可能不准确。
+*   **决策:** `ConfigManager` 将负责自动创建 `.example` 配置文件的副本（如 `config.ini`, `whitelist.json`）如果它们不存在。
+    *   **理由:** 提升首次运行的便捷性，用户无需手动复制模板。
+    *   **影响:** `core/config_manager.py` 实现中增加了文件创建逻辑。
 
-2.  **前端临时调整与进一步观察:**
-    *   前端在 `ResultsList.jsx` 中增加特殊逻辑：即使 `totalPages` 为1，但如果 `totalHits === hitsPerPage` (暗示API可能限制了返回数量)，也尝试显示分页。
-    *   **结果:** 用户反馈依然是1页，每页5个结果。这强烈暗示后端API返回的 `estimatedTotalHits` 就是5（或小于等于5）。
+*   **决策:** `MeiliSearchService` 中，索引的 `id` 字段将作为主键。
+    *   **理由:** 解决 Meilisearch 在有多个 `id` 后缀字段时主键推断失败的问题。
+    *   **影响:** `core/meilisearch_service.py` 的 `ensure_index_setup` 方法中显式设置了主键。
 
-3.  **转向后端排查 (代码模式介入):**
-    *   NexusCore 指示代码模式在后端相关模块添加详细日志，追踪 `estimatedTotalHits` 的传递路径。
-    *   日志添加位置：
-        *   [`core/meilisearch_service.py`](core/meilisearch_service.py:0): 记录Meilisearch原始搜索结果和处理后的搜索指标。
-        *   [`api/routers/search.py`](api/routers/search.py:0): 记录接收的请求参数、从 `meilisearch_service` 获取的 `estimatedTotalHits`、计算的 `totalPages`。
+*   **决策:** 前端项目选用 Vite + React + Zustand + Tailwind CSS 技术栈。
+    *   **理由:**
+        *   Vite: 现代化的构建工具，提供极佳的开发体验。
+        *   React: 成熟的 UI 库。
+        *   Zustand: 轻量级、简洁的状态管理方案。
+        *   Tailwind CSS: 原子化 CSS，便于快速构建界面。
+        *   `@telegram-apps/sdk`: 官方推荐的 Telegram Mini App SDK。
+    *   **影响:** `frontend/` 目录下的项目初始化和依赖安装。
 
-4.  **后端日志分析 (关键突破):**
-    *   用户提供了包含新增日志的后端运行输出。
-    *   **发现 1 (Meilisearch 正确):** [`core.meilisearch_service`](core/meilisearch_service.py:0) 日志显示 Meilisearch 原始响应中包含正确的总数估算，例如：`'totalPages': 35`, `'totalHits': 173`。
-    *   **发现 2 (Service 层错误):** [`core.meilisearch_service`](core/meilisearch_service.py:0) 在处理并记录其自己的搜索结果时，错误地将当前页返回的 `hits` 数量（例如5条）当作了 `估计总结果数`。它没有正确使用 Meilisearch 原始响应中的 `totalHits`。
-        *   日志示例: `INFO - 搜索 '1' 找到 5 条结果，... 估计总结果数: 5`
-    *   **发现 3 (API 层接收错误数据):** [`api.routers.search`](api/routers/search.py:0) 从 `meilisearch_service.py` 接收到的 `estimatedTotalHits` 是错误的 `5`，因此最终传递给前端的也是这个错误的值。
+*   **决策:** 后端 API (`/api/v1/search`) 将支持更丰富的查询参数，包括 `chat_id_filter`, `chat_type_filter`, `sender_id_filter`, `date_from`, `date_to`, `sort_by`, `offset`, `limit`。
+    *   **理由:** 提供更灵活和强大的搜索能力给前端。
+    *   **影响:** `api/routers/search.py` 和 `core/meilisearch_service.py` 的实现。
 
-**根本原因:**
-问题出在 [`core/meilisearch_service.py`](core/meilisearch_service.py:0) 在封装 Meilisearch 客户端的搜索结果时，未能正确提取和返回 Meilisearch 提供的真实 `totalHits` (或 `estimated_total_hits`, `nb_hits`)。它错误地使用了当前页返回的 `hits` 数量作为总数的估算。
+*   **决策:** 修复前端分页功能时，确定问题根源在后端 `MeiliSearchService` 未正确返回 `estimatedTotalHits`。
+    *   **理由:** 通过在后端添加详细日志进行诊断。
+    *   **影响:** 修改了 `core/meilisearch_service.py` 的 `search()` 方法。
 
-**解决方案:**
+*   **决策:** 前端与 TMA SDK 集成时，创建自定义 Hook `useTelegramSDK`。
+    *   **理由:** 封装 SDK 逻辑，便于在多组件中使用，并处理非 TMA 环境下的优雅降级。
+    *   **影响:** 创建了 `frontend/src/hooks/useTelegramSDK.js`。
 
-*   代码模式修改 [`core/meilisearch_service.py`](core/meilisearch_service.py:0) 中的 `search()` 方法。
-*   **修复逻辑:** 优先从 Meilisearch 客户端返回对象的 `estimated_total_hits` 或 `nb_hits` 属性获取总命中数。如果这些属性不存在，则尝试从原始结果字典中的 `totalHits` 字段获取。再失败则尝试根据原始结果中的 `totalPages` 和 `hitsPerPage` 计算。最后，作为万不得已的备选，才使用当前页的 `hits` 数量。
+*   **决策:** 历史消息同步功能增强，引入持久化同步点和增量更新。
+    *   **理由:** 避免重复索引，提高同步效率，支持按时间范围同步。
+    *   **影响:** 修改了 `core/config_manager.py` (添加 `SyncPointManager`) 和 `user_bot/history_syncer.py`。
 
-**验证:**
-修复后，用户再次测试，前端分页功能恢复正常，能够正确显示总页数并进行翻页。
+## 2025/5/21
 
-**经验总结:**
-*   当出现数据不一致导致的功能异常时，从数据源头开始，逐层向上追踪数据的传递和处理过程是有效的排错方法。
-*   详细的日志记录对于定位复杂系统中的问题至关重要。
-*   对于依赖外部SDK或服务的情况，务必仔细阅读其API文档，理解其返回数据的确切结构和含义，避免错误解析。
-*   在封装外部服务时，应优先使用其提供的官方统计数据（如 `estimated_total_hits`），而不是自行根据部分数据进行推断。
+*   **决策:** User Bot 的配置（API ID/Hash）将存储在独立的 `.env.userbot` 文件中，并通过 Search Bot 的管理员命令进行管理。
+    *   **理由:** 增强安全性，将用户凭据与 Bot 配置分离，方便动态更新。
+    *   **影响:** 修改了 `core/config_manager.py`, `search_bot/command_handlers.py`, `main.py`。
+
+*   **决策:** 实现 User Bot 的远程重启机制，通过 Search Bot 的 `/restart_userbot` 命令触发。
+    *   **理由:** 方便在更新配置后应用更改，无需手动重启整个应用。
+    *   **影响:** 修改了 `main.py` (使用 `asyncio.Event`), `user_bot/client.py`, `search_bot/command_handlers.py`。
+
+*   **决策:** Search Bot 将支持无命令前缀的普通文本消息搜索。
+    *   **理由:** 提升用户体验，使其更接近自然语言交互。
+    *   **影响:** 修改了 `search_bot/command_handlers.py`，添加了新的事件处理器。
+
+*   **决策:** 优化 Search Bot 搜索结果的 Markdown 展示。
+    *   **理由:** 提升信息可读性和美观性。
+    *   **影响:** 修改了 `search_bot/message_formatters.py`, `search_bot/command_handlers.py`, `search_bot/callback_query_handlers.py`。
+
+## 2025/5/23
+
+*   **决策:** 为实现 `/get_dialogs` 功能，Code Mode 主动将原计划的多个子任务合并执行。
+    *   **理由:** Code Mode 判断这些子任务关联紧密，一次性完成效率更高，且能直接进行端到端验证。
+    *   **影响:**
+        *   在 `user_bot/client.py` 中添加了 `get_dialogs_info()` 方法及单元测试。
+        *   在 `search_bot/command_handlers.py` 中添加了 `/get_dialogs` 命令处理器。
+        *   在 `search_bot/message_formatters.py` 中添加了 `format_dialogs_list()` 格式化函数，并更新了 `/help` 信息。
+    *   **结果:** 整个 `/get_dialogs` 功能（包括 User Bot 端能力、Search Bot 端命令、消息格式化和帮助文档更新）已由 Code Mode 一并完成。

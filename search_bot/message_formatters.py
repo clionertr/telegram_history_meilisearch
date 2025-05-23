@@ -218,6 +218,10 @@ def format_help_message() -> str:
 - 点击结果下方的链接可直接跳转到原始消息位置。
 - 使用页面底部的按钮进行翻页。
 
+**对话管理:**
+- `/get_dialogs`: 获取当前账户下的所有对话列表，包括对话名称和ID。
+  这些ID可用于白名单管理命令。
+
 ---
 
 **管理员命令 (仅限管理员使用):**
@@ -283,3 +287,65 @@ def format_help_message() -> str:
 如果您在使用过程中遇到任何问题或有任何建议，欢迎提出！
     """
     return help_text.strip()
+
+
+def format_dialogs_list(dialogs_info: List[Tuple[str, int]]) -> str:
+    """
+    格式化对话列表为用户友好的文本
+    
+    将从 UserBotClient 获取的对话信息格式化为用户友好的文本，
+    包括对话名称和ID。
+    
+    Args:
+        dialogs_info: 包含 (dialog_name, dialog_id) 元组的列表
+        
+    Returns:
+        str: 格式化后的对话列表文本
+    """
+    if not dialogs_info:
+        return "📭 **对话列表为空**\n\n当前账户下没有找到任何对话。"
+    
+    # 构建消息头部
+    message_parts = [
+        f"💬 **对话列表** (共 **{len(dialogs_info)}** 个对话)\n\n"
+    ]
+    
+    # 遍历对话列表，格式化每个对话
+    for index, (dialog_name, dialog_id) in enumerate(dialogs_info, 1):
+        # 安全处理对话名称，避免Markdown冲突
+        safe_dialog_name = dialog_name or "未知对话"
+        
+        # 清理对话名称中的Markdown标记
+        for pattern, replacement in MARKDOWN_PATTERNS:
+            safe_dialog_name = re.sub(pattern, replacement, safe_dialog_name)
+        
+        # 截取过长的对话名称
+        if len(safe_dialog_name) > 50:
+            safe_dialog_name = safe_dialog_name[:47] + "..."
+        
+        # 格式化单个对话条目
+        message_parts.append(
+            f"{index}. **{safe_dialog_name}**\n"
+            f"   ID: `{dialog_id}`\n\n"
+        )
+        
+        # 如果对话数量过多，限制显示数量以避免消息过长
+        if index >= 50:  # Telegram消息长度限制
+            remaining_count = len(dialogs_info) - index
+            if remaining_count > 0:
+                message_parts.append(f"... 还有 **{remaining_count}** 个对话未显示\n\n")
+            break
+    
+    # 添加说明信息
+    message_parts.append(
+        "💡 **说明:**\n"
+        "- 对话ID可用于白名单管理命令\n"
+        "- 使用 `/add_whitelist <对话ID>` 添加到白名单\n"
+        "- 使用 `/remove_whitelist <对话ID>` 从白名单移除"
+    )
+    
+    # 合并所有消息部分
+    formatted_message = ''.join(message_parts)
+    
+    logger.debug(f"已格式化对话列表，包含 {len(dialogs_info)} 个对话")
+    return formatted_message

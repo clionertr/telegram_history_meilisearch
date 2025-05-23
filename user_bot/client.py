@@ -239,6 +239,50 @@ class UserBotClient:
             
         return self._client
 
+    async def get_dialogs_info(self) -> list[tuple[str, int]]:
+        """
+        获取用户账户下的所有对话信息
+        
+        使用Telethon客户端的get_dialogs()功能获取所有对话，
+        并提取每个对话的名称和ID。
+        
+        Returns:
+            list[tuple[str, int]]: 包含(dialog_name, dialog_id)元组的列表
+            
+        Raises:
+            RuntimeError: 如果客户端未初始化或未连接
+            Exception: 如果获取对话信息时发生API错误
+        """
+        if not self._client:
+            logger.error("客户端未初始化，无法获取对话信息")
+            raise RuntimeError("客户端未初始化")
+            
+        if not self._client.is_connected():
+            logger.error("客户端未连接，无法获取对话信息")
+            raise RuntimeError("客户端未连接，请先调用start()方法")
+            
+        try:
+            logger.info("开始获取对话列表...")
+            
+            # 使用Telethon的get_dialogs()方法获取所有对话
+            dialogs = await self._client.get_dialogs()
+            
+            # 提取对话名称和ID
+            dialogs_info = []
+            for dialog in dialogs:
+                dialog_name = dialog.name or "未知对话"
+                dialog_id = dialog.id
+                dialogs_info.append((dialog_name, dialog_id))
+                
+            logger.info(f"成功获取 {len(dialogs_info)} 个对话信息")
+            logger.debug(f"对话列表: {dialogs_info}")
+            
+            return dialogs_info
+            
+        except Exception as e:
+            logger.error(f"获取对话信息时发生错误: {str(e)}")
+            raise Exception(f"获取对话信息失败: {str(e)}")
+
     async def disconnect(self) -> None:
         """
         断开与Telegram服务器的连接
