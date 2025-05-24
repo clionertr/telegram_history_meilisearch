@@ -1,5 +1,6 @@
 import { useEffect } from 'react';
 import SearchBar from '../components/SearchBar';
+import FilterControls from '../components/FilterControls';
 import ResultsList from '../components/ResultsList';
 import useSearchStore from '../store/searchStore';
 import useTelegramSDK from '../hooks/useTelegramSDK';
@@ -127,6 +128,9 @@ function SearchPage() {
       <main>
         {/* 搜索栏 */}
         <SearchBar />
+        
+        {/* 筛选控件 */}
+        <FilterControls />
         
         {/* 搜索结果列表 */}
         <ResultsList />
