@@ -464,3 +464,26 @@
 *   **详细日志:** 详细的分析、实现步骤、代码修改和测试验证已记录在 [`memory-bank/activeContext.md`](memory-bank/activeContext.md:0) (版本：阶段 3 - 任务 1 完善后端功能 - 筛选)。
 
 ---
+### 任务 3.2: 完善前端功能 (基于 `FOLLOWME.md` 次要功能) (已完成)
+*   **完成时间:** 2025/5/24 下午5:09 (大致时间，基于子任务报告)
+*   **执行者:** 💻 Code Mode
+*   **主要成果:**
+    *   **筛选 UI 实现:**
+        *   创建了可折叠的筛选面板组件 [`frontend/src/components/FilterControls.jsx`](frontend/src/components/FilterControls.jsx:0)。
+        *   UI 包含消息来源类别 (复选框: user, group, channel) 和时间段 (原生日期选择器) 的筛选控件。
+        *   集成了 Telegram 主题样式，并能在折叠时简洁显示已应用的筛选条件。
+    *   **状态管理与 API 调用:**
+        *   筛选条件的状态由 Zustand store ([`frontend/src/store/searchStore.js`](frontend/src/store/searchStore.js:0)) 统一管理。
+        *   实现了日期到 Unix 时间戳 (秒级) 的正确转换。
+        *   更新了 API 调用逻辑 ([`frontend/src/services/api.js`](frontend/src/services/api.js:0))，以在搜索时正确传递筛选参数给后端。
+    *   **用户体验优化:**
+        *   实现了筛选条件的自动应用，用户更改筛选选项即时触发搜索。
+        *   为日期筛选设置了默认值 (结束日期为明天，开始日期为三个月前)。
+        *   提供了“清空筛选”功能。
+    *   **关键词高亮修复与增强:**
+        *   修复了 [`frontend/src/components/ResultItem.jsx`](frontend/src/components/ResultItem.jsx:0) 中高亮标签未被正确渲染的问题，通过使用 `dangerouslySetInnerHTML`。
+        *   添加了自定义 CSS 样式，使高亮文本更明显并与 Telegram 主题协调。
+    *   **集成:** 将 `FilterControls` 组件成功集成到主搜索页面 [`frontend/src/pages/SearchPage.jsx`](frontend/src/pages/SearchPage.jsx:0)。
+*   **详细日志:** 详细的分析、UI 设计、实现步骤、代码修改、问题修复和功能增强已记录在 [`memory-bank/activeContext.md`](memory-bank/activeContext.md:0) (版本：阶段 3 - 任务 2 完善前端功能 - 筛选)。
+
+---

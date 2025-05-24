@@ -85,3 +85,16 @@
         *   **[`core/meilisearch_service.py`](core/meilisearch_service.py:0):** 确认其 `search()` 方法已具备接收 `chat_types` (列表), `start_timestamp`, `end_timestamp` 参数的能力。
         *   **[`api/routers/search.py`](api/routers/search.py:0):** 确认其 `/api/v1/search` 端点已支持通过请求体中的 `filters` 对象传递 `chat_type` (列表), `date_from`, `date_to`。
         *   **测试:** 为 `command_handlers.py` 中的筛选逻辑添加了新的单元测试 ([`tests/unit/test_command_handlers_filters.py`](tests/unit/test_command_handlers_filters.py:0))。
+
+*   **决策:** 实现前端按消息来源类别和时间段筛选功能，并优化用户体验。
+    *   **理由:** 遵循 `FOLLOWME.md` 和 `PLAN.md` 中定义的次要功能要求，使用户能够方便地使用后端新增的筛选能力。
+    *   **影响与技术细节:**
+        *   **新组件:** 创建了 [`frontend/src/components/FilterControls.jsx`](frontend/src/components/FilterControls.jsx:0) 用于封装筛选 UI 和逻辑。
+        *   **UI 设计:** 采用可折叠面板，包含聊天类型复选框和日期选择器。
+        *   **状态管理:** 利用现有的 Zustand store ([`frontend/src/store/searchStore.js`](frontend/src/store/searchStore.js:0)) 管理筛选条件。
+        *   **数据处理:** 确保用户选择的日期被正确转换为 Unix 时间戳 (秒级) 后再传递给 API。
+        *   **用户体验:**
+            *   实现了筛选条件的自动应用，用户更改筛选选项即时触发搜索。
+            *   为日期筛选设置了默认值 (例如，最近三个月到明天)。
+        *   **关键词高亮修复:** 在 [`frontend/src/components/ResultItem.jsx`](frontend/src/components/ResultItem.jsx:0) 中使用 `dangerouslySetInnerHTML` 并添加自定义 CSS，以正确渲染和美化后端返回的 HTML 高亮标签。
+        *   **集成:** 将 `FilterControls` 组件集成到主搜索页面 [`frontend/src/pages/SearchPage.jsx`](frontend/src/pages/SearchPage.jsx:0)。
