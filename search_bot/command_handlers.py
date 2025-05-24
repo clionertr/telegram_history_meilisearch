@@ -283,14 +283,35 @@ class CommandHandlers:
                                       filters: Optional[str],
                                       sort: List[str],
                                       page: int,
-                                      hits_per_page: int) -> Dict[str, Any]:
-        """Helper function to call MeiliSearch and return results."""
+                                      hits_per_page: int,
+                                      start_timestamp: Optional[int] = None,
+                                      end_timestamp: Optional[int] = None,
+                                      chat_types: Optional[List[str]] = None) -> Dict[str, Any]:
+        """
+        Helper function to call MeiliSearch and return results.
+        
+        Args:
+            parsed_query: 解析后的查询字符串
+            filters: Meilisearch 过滤条件字符串
+            sort: 排序规则列表
+            page: 页码
+            hits_per_page: 每页结果数
+            start_timestamp: 开始时间戳（可选）
+            end_timestamp: 结束时间戳（可选）
+            chat_types: 聊天类型列表（可选）
+            
+        Returns:
+            Dict[str, Any]: Meilisearch 搜索结果
+        """
         return self.meilisearch_service.search(
             query=parsed_query,
             filters=filters,
             sort=sort,
             page=page,
-            hits_per_page=hits_per_page
+            hits_per_page=hits_per_page,
+            start_timestamp=start_timestamp,
+            end_timestamp=end_timestamp,
+            chat_types=chat_types
         )
 
     async def _fetch_all_results_async(self, cache_key: str, parsed_query: str, filters_dict: Optional[Dict[str, Any]], meili_filters: Optional[str], sort_options: List[str], total_hits_estimate: int):
@@ -333,12 +354,32 @@ class CommandHandlers:
             fetch_limit = min(total_hits_estimate, 1000) # Cap full fetch at 1000 for now
 
             if fetch_limit > 0:
+                # 准备筛选参数
+                start_timestamp = None
+                end_timestamp = None
+                chat_types = None
+                
+                if filters_dict:
+                    # 提取日期范围
+                    if 'date_range' in filters_dict:
+                        date_range = filters_dict['date_range']
+                        start_timestamp = date_range.get('start')
+                        end_timestamp = date_range.get('end')
+                    
+                    # 提取聊天类型
+                    if 'chat_type' in filters_dict:
+                        chat_types = filters_dict['chat_type']
+                
+                # 获取所有结果
                 full_search_results_obj = await self._get_results_from_meili(
                     parsed_query=parsed_query,
                     filters=meili_filters,
                     sort=sort_options,
                     page=1, # Get all from the first page
-                    hits_per_page=fetch_limit # Request all (up to the cap)
+                    hits_per_page=fetch_limit, # Request all (up to the cap)
+                    start_timestamp=start_timestamp,
+                    end_timestamp=end_timestamp,
+                    chat_types=chat_types
                 )
                 all_results_data = full_search_results_obj.get('hits', [])
             
@@ -455,9 +496,26 @@ class CommandHandlers:
                 
                 initial_fetch_count = self.cache_service.get_initial_fetch_count()
                 
+                # 准备筛选参数
+                start_timestamp = None
+                end_timestamp = None
+                chat_types = None
+                
+                if filters_dict:
+                    # 提取日期范围
+                    if 'date_range' in filters_dict:
+                        date_range = filters_dict['date_range']
+                        start_timestamp = date_range.get('start')
+                        end_timestamp = date_range.get('end')
+                    
+                    # 提取聊天类型
+                    if 'chat_type' in filters_dict:
+                        chat_types = filters_dict['chat_type']
+                
                 # Stage 1: Initial Fetch
                 initial_results_obj = await self._get_results_from_meili(
-                    parsed_query, meili_filters, sort_options, 1, initial_fetch_count
+                    parsed_query, meili_filters, sort_options, 1, initial_fetch_count,
+                    start_timestamp=start_timestamp, end_timestamp=end_timestamp, chat_types=chat_types
                 )
                 initial_hits_data = initial_results_obj.get('hits', [])
                 estimated_total_hits = initial_results_obj.get('estimatedTotalHits', 0)
@@ -507,8 +565,26 @@ class CommandHandlers:
                 logger.warning(f"缓存未命中或数据不足 (页码 {page}) for '{parsed_query}'. 直接从 MeiliSearch 获取。")
                 status_message = await event.respond(f"🔍 正在加载第 {page} 页，请稍候...", parse_mode='md')
                 
+                # 准备筛选参数
+                start_timestamp = None
+                end_timestamp = None
+                chat_types = None
+                
+                if filters_dict:
+                    # 提取日期范围
+                    if 'date_range' in filters_dict:
+                        date_range = filters_dict['date_range']
+                        start_timestamp = date_range.get('start')
+                        end_timestamp = date_range.get('end')
+                    
+                    # 提取聊天类型
+                    if 'chat_type' in filters_dict:
+                        chat_types = filters_dict['chat_type']
+                
+                # 获取特定页面的结果
                 page_specific_results_obj = await self._get_results_from_meili(
-                    parsed_query, meili_filters, sort_options, page, hits_per_page
+                    parsed_query, meili_filters, sort_options, page, hits_per_page,
+                    start_timestamp=start_timestamp, end_timestamp=end_timestamp, chat_types=chat_types
                 )
                 estimated_total_hits = page_specific_results_obj.get('estimatedTotalHits', 0) # Re-confirm total
                 total_pages = (estimated_total_hits + hits_per_page - 1) // hits_per_page if estimated_total_hits > 0 else 0
@@ -560,6 +636,7 @@ class CommandHandlers:
         支持的语法:
         - 精确短语: "关键短语"
         - 类型筛选: type:类型 (user/group/channel)
+          可以多次使用此语法来筛选多种类型，如: type:group type:channel
         - 时间筛选: date:起始_结束 (YYYY-MM-DD_YYYY-MM-DD)
         
         Args:
@@ -571,14 +648,20 @@ class CommandHandlers:
         # 初始化结果
         filters = {}
         
-        # 处理类型筛选
-        type_match = re.search(r'type:(\w+)', query)
-        if type_match:
-            chat_type = type_match.group(1).lower()
-            if chat_type in ['user', 'group', 'channel']:
-                filters['chat_type'] = chat_type
-                # 从查询中移除 type: 部分
-                query = re.sub(r'type:\w+', '', query).strip()
+        # 处理类型筛选 (可能有多个)
+        chat_types = []
+        type_matches = re.finditer(r'type:(\w+)', query)
+        valid_chat_types = ['user', 'group', 'channel']
+        
+        for match in type_matches:
+            chat_type = match.group(1).lower()
+            if chat_type in valid_chat_types and chat_type not in chat_types:
+                chat_types.append(chat_type)
+        
+        if chat_types:
+            filters['chat_type'] = chat_types
+            # 从查询中移除所有 type: 部分
+            query = re.sub(r'type:\w+', '', query).strip()
         
         # 处理时间筛选
         date_match = re.search(r'date:(\d{4}-\d{2}-\d{2})(?:_(\d{4}-\d{2}-\d{2}))?', query)
@@ -621,7 +704,15 @@ class CommandHandlers:
         
         # 处理聊天类型过滤
         if 'chat_type' in filters_dict:
-            filter_parts.append(f"chat_type = '{filters_dict['chat_type']}'")
+            chat_type_value = filters_dict['chat_type']
+            
+            # 如果是列表，构建 OR 条件
+            if isinstance(chat_type_value, list) and chat_type_value:
+                chat_type_conditions = [f"chat_type = '{chat_type}'" for chat_type in chat_type_value]
+                filter_parts.append(f"({' OR '.join(chat_type_conditions)})")
+            # 如果是单个值，直接添加条件
+            elif isinstance(chat_type_value, str):
+                filter_parts.append(f"chat_type = '{chat_type_value}'")
         
         # 处理日期范围过滤
         if 'date_range' in filters_dict:

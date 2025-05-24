@@ -72,3 +72,16 @@
         *   在 `search_bot/command_handlers.py` 中添加了 `/get_dialogs` 命令处理器。
         *   在 `search_bot/message_formatters.py` 中添加了 `format_dialogs_list()` 格式化函数，并更新了 `/help` 信息。
     *   **结果:** 整个 `/get_dialogs` 功能（包括 User Bot 端能力、Search Bot 端命令、消息格式化和帮助文档更新）已由 Code Mode 一并完成。
+
+## 2025/5/24
+
+*   **决策:** 实现后端按消息来源类别和时间段筛选功能。
+    *   **理由:** 遵循 `FOLLOWME.md` 和 `PLAN.md` 中定义的次要功能要求，提升搜索的灵活性和精确度。
+    *   **影响与技术细节:**
+        *   **[`search_bot/command_handlers.py`](search_bot/command_handlers.py:0):**
+            *   `_parse_advanced_syntax()`: 修改为能解析多个 `type:类型` 参数，并将结果存为列表。
+            *   `_build_meilisearch_filters()`: 修改为能处理 `chat_type` 为列表的情况，构建 `OR` 连接的 Meilisearch 筛选字符串。
+            *   `_get_results_from_meili()` 和 `_perform_search()`: 确保正确提取和传递解析出的时间戳和聊天类型列表参数给 `MeiliSearchService`。
+        *   **[`core/meilisearch_service.py`](core/meilisearch_service.py:0):** 确认其 `search()` 方法已具备接收 `chat_types` (列表), `start_timestamp`, `end_timestamp` 参数的能力。
+        *   **[`api/routers/search.py`](api/routers/search.py:0):** 确认其 `/api/v1/search` 端点已支持通过请求体中的 `filters` 对象传递 `chat_type` (列表), `date_from`, `date_to`。
+        *   **测试:** 为 `command_handlers.py` 中的筛选逻辑添加了新的单元测试 ([`tests/unit/test_command_handlers_filters.py`](tests/unit/test_command_handlers_filters.py:0))。

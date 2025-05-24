@@ -442,3 +442,25 @@
 *   **详细日志:** 详细的实现步骤、代码、测试用例以及用户交互确认过程已记录在 [`memory-bank/activeContext.md`](memory-bank/activeContext.md:0) (版本：用户请求 - 添加 /get_dialogs 指令)。
 
 ---
+### 任务 3.1: 完善后端功能 (基于 `FOLLOWME.md` 次要功能) (已完成)
+*   **完成时间:** 2025/5/24 下午4:43 (大致时间，基于子任务报告)
+*   **执行者:** 💻 Code Mode
+*   **主要成果:**
+    *   **按消息来源类别筛选:**
+        *   更新了 [`search_bot/command_handlers.py`](search_bot/command_handlers.py:0) 中的 `_get_results_from_meili`, `_parse_advanced_syntax`, `_build_meilisearch_filters`, 和 `_perform_search` 方法，以支持通过命令参数（如 `type:group`）按 `chat_type` 筛选，并能处理多个类型。
+        *   确认 [`core/meilisearch_service.py`](core/meilisearch_service.py:0) 的 `search()` 方法已支持 `chat_types` 参数。
+        *   确认 [`api/routers/search.py`](api/routers/search.py:0) 的 `/api/v1/search` 端点已支持通过 `filters` 对象传递 `chat_type` 列表。
+    *   **按时间段搜索:**
+        *   更新了 [`search_bot/command_handlers.py`](search_bot/command_handlers.py:0) 中的相关方法，以支持通过命令参数（如 `date:YYYY-MM-DD_YYYY-MM-DD`）按 `date` (Unix timestamp) 筛选。
+        *   确认 [`core/meilisearch_service.py`](core/meilisearch_service.py:0) 的 `search()` 方法已支持 `start_timestamp` 和 `end_timestamp` 参数。
+        *   确认 [`api/routers/search.py`](api/routers/search.py:0) 的 `/api/v1/search` 端点已支持通过 `filters` 对象传递 `date_from` 和 `date_to`。
+    *   **Bot 命令与交互:**
+        *   Search Bot 的命令处理逻辑已更新以支持新的筛选参数。
+        *   [`search_bot/message_formatters.py`](search_bot/message_formatters.py:0) 中的 `format_help_message()` 已包含筛选说明。
+    *   **API 支持:** API 端点已确认支持新的筛选条件。
+    *   **测试:**
+        *   创建了新的单元测试文件 [`tests/unit/test_command_handlers_filters.py`](tests/unit/test_command_handlers_filters.py:0) 来覆盖 `command_handlers.py` 中的筛选逻辑。
+        *   确认现有的集成测试 [`tests/integration/test_search_api.py`](tests/integration/test_search_api.py:0) 已覆盖 API 端点的筛选功能。
+*   **详细日志:** 详细的分析、实现步骤、代码修改和测试验证已记录在 [`memory-bank/activeContext.md`](memory-bank/activeContext.md:0) (版本：阶段 3 - 任务 1 完善后端功能 - 筛选)。
+
+---
