@@ -120,3 +120,68 @@ import ResultsList from '../components/ResultsList';
 3. **测试功能：**
    - 筛选UI的交互逻辑已实现
    - 筛选条件正确传递给了API调用
+## 6. 修复关键词高亮问题
+
+发现前端没有正确渲染搜索结果中的高亮关键词。后端API返回的搜索结果中包含`<em>`标签来标记关键词，但这些HTML标签直接显示为文本而不是被解析。
+
+### 6.1 问题分析
+
+`ResultItem.jsx`组件中，`text_snippet`字段直接作为文本内容渲染：
+```jsx
+<p className="mb-3 whitespace-pre-line" style={contentStyle}>
+  {text_snippet || '无消息内容'}
+</p>
+```
+
+这导致HTML标签被当作纯文本显示，例如`<em>`关键词`</em>`会直接显示，而不是被解释为高亮元素。
+
+### 6.2 修复方案
+
+1. 修改`ResultItem.jsx`组件，使用`dangerouslySetInnerHTML`属性来渲染HTML内容：
+
+```jsx
+<p 
+  className="mb-3 whitespace-pre-line result-content" 
+  style={contentStyle}
+  dangerouslySetInnerHTML={{
+    __html: text_snippet || '无消息内容'
+  }}
+/>
+```
+
+2. 添加CSS样式，使高亮文本更加明显：
+
+```jsx
+// 高亮样式
+const highlightStyles = `
+  .result-content em {
+    font-style: normal;
+    font-weight: bold;
+    ${isAvailable && themeParams 
+      ? `background-color: ${themeParams.accent_color || 'rgba(59, 130, 246, 0.2)'};
+         color: ${themeParams.accent_text_color || themeParams.text_color};` 
+      : 'background-color: rgba(59, 130, 246, 0.2);'
+    }
+    padding: 0 2px;
+    border-radius: 2px;
+  }
+`;
+```
+
+3. 在组件中添加样式标签：
+```jsx
+<style>{highlightStyles}</style>
+```
+
+4. 为包含内容的段落添加`result-content`类，以应用高亮样式：
+```jsx
+<p className="mb-3 whitespace-pre-line result-content" ... />
+```
+
+### 6.3 效果
+
+现在搜索结果中的关键词会以高亮样式显示，颜色根据Telegram主题动态调整。高亮文本具有以下特点：
+- 粗体显示（不使用斜体）
+- 带有背景色
+- 轻微的内边距和圆角
+- 与Telegram主题颜色相协调

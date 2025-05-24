@@ -68,6 +68,21 @@ function ResultItem({ result }) {
     color: themeParams.text_color
   } : {};
 
+  // 高亮样式
+  const highlightStyles = `
+    .result-content em {
+      font-style: normal;
+      font-weight: bold;
+      ${isAvailable && themeParams
+        ? `background-color: ${themeParams.accent_color || 'rgba(59, 130, 246, 0.2)'};
+           color: ${themeParams.accent_text_color || themeParams.text_color};`
+        : 'background-color: rgba(59, 130, 246, 0.2);'
+      }
+      padding: 0 2px;
+      border-radius: 2px;
+    }
+  `;
+
   const linkStyle = isAvailable && themeParams ? {
     color: themeParams.link_color
   } : {};
@@ -78,6 +93,8 @@ function ResultItem({ result }) {
       style={cardStyle}
       key={messageId}
     >
+      {/* 高亮文本的样式 */}
+      <style>{highlightStyles}</style>
       {/* 标题信息 */}
       <div className="flex justify-between items-start mb-2">
         <div>
@@ -90,10 +107,14 @@ function ResultItem({ result }) {
         </div>
       </div>
 
-      {/* 消息内容 */}
-      <p className="mb-3 whitespace-pre-line" style={contentStyle}>
-        {text_snippet || '无消息内容'}
-      </p>
+      {/* 消息内容 - 使用dangerouslySetInnerHTML渲染HTML标签 */}
+      <p
+        className="mb-3 whitespace-pre-line result-content"
+        style={contentStyle}
+        dangerouslySetInnerHTML={{
+          __html: text_snippet || '无消息内容'
+        }}
+      />
 
       {/* 消息链接 */}
       {message_link && (
