@@ -20,6 +20,18 @@ from api.dependencies import get_meilisearch_service
 
 
 # 定义数据模型
+class AdvancedSearchRequest(BaseModel):
+    """高级搜索请求模型"""
+    query: str = Field(..., description="搜索关键词")
+    start_timestamp: Optional[int] = Field(None, description="起始时间的 Unix 时间戳")
+    end_timestamp: Optional[int] = Field(None, description="结束时间的 Unix 时间戳")
+    chat_types: Optional[List[str]] = Field(None, description="聊天类型列表，可选值: user, group, channel")
+    chat_ids: Optional[List[int]] = Field(None, description="聊天 ID 列表")
+    page: int = Field(1, ge=1, description="页码，从 1 开始")
+    hits_per_page: int = Field(10, ge=1, le=100, description="每页结果数量")
+
+
+# 保持向后兼容的旧模型
 class SearchFilters(BaseModel):
     """搜索过滤条件模型"""
     chat_type: Optional[List[str]] = Field(None, description="聊天类型筛选，可选值: user, group, channel")
@@ -61,6 +73,84 @@ router = APIRouter(
     tags=["search"],
     responses={404: {"description": "Not found"}},
 )
+
+
+@router.post("/advanced", response_model=SearchResponse)
+async def advanced_search_messages(
+    search_request: AdvancedSearchRequest,
+    meili_service: MeiliSearchService = Depends(get_meilisearch_service)
+) -> Dict[str, Any]:
+    """
+    高级搜索消息 API 端点
+    
+    支持时间范围、聊天类型和聊天ID的高级过滤功能
+    
+    Args:
+        search_request: 包含查询条件和高级过滤参数的请求模型
+        meili_service: MeilisearchService 实例，通过依赖注入获取
+        
+    Returns:
+        符合 SearchResponse 模型的响应字典
+    """
+    logger = logging.getLogger(__name__)
+    logger.info(f"收到高级搜索请求: {search_request.query}, 时间范围: {search_request.start_timestamp}-{search_request.end_timestamp}, "
+                f"聊天类型: {search_request.chat_types}, 聊天ID: {search_request.chat_ids}")
+    
+    try:
+        # 设置排序（默认按日期降序）
+        sort = ["date:desc"]
+        
+        # 执行高级搜索
+        search_results = meili_service.search(
+            query=search_request.query,
+            sort=sort,
+            page=search_request.page,
+            hits_per_page=search_request.hits_per_page,
+            start_timestamp=search_request.start_timestamp,
+            end_timestamp=search_request.end_timestamp,
+            chat_types=search_request.chat_types,
+            chat_ids=search_request.chat_ids
+        )
+        
+        # 处理搜索结果
+        hits = []
+        for hit in search_results.get('hits', []):
+            # 创建文本摘要，优先使用高亮结果
+            text = hit.get('text', '')
+            
+            # 检查是否有高亮信息
+            if '_formatted' in hit and 'text' in hit['_formatted']:
+                text_snippet = hit['_formatted']['text'][:300] + ('...' if len(hit['_formatted']['text']) > 300 else '')
+            else:
+                text_snippet = text[:200] + ('...' if len(text) > 200 else '')
+            
+            # 创建结果项
+            hit_item = SearchResultItem(
+                id=hit.get('id', ''),
+                chat_title=hit.get('chat_title', None),
+                sender_name=hit.get('sender_name', None),
+                text_snippet=text_snippet,
+                date=hit.get('date', 0),
+                message_link=hit.get('message_link', '')
+            )
+            hits.append(hit_item)
+        
+        # 构建响应
+        response = {
+            "hits": hits,
+            "query": search_request.query,
+            "processingTimeMs": search_results.get('processingTimeMs', 0),
+            "limit": search_request.hits_per_page,
+            "offset": (search_request.page - 1) * search_request.hits_per_page,
+            "estimatedTotalHits": search_results.get('estimatedTotalHits', 0)
+        }
+        
+        logger.info(f"高级搜索 '{search_request.query}' 找到 {len(hits)} 条结果，estimatedTotalHits={response['estimatedTotalHits']}")
+        return response
+        
+    except Exception as e:
+        logger.error(f"高级搜索时发生错误: {str(e)}")
+        raise HTTPException(status_code=500, detail=f"高级搜索失败: {str(e)}")
 
 
 @router.post("", response_model=SearchResponse)
@@ -112,13 +202,29 @@ async def search_messages(
         # 设置排序（默认按日期降序）
         sort = ["date:desc"]
         
-        # 执行搜索
+        # 转换旧格式参数到新格式
+        start_timestamp = None
+        end_timestamp = None
+        chat_types = None
+        
+        if search_request.filters:
+            if search_request.filters.date_from:
+                start_timestamp = search_request.filters.date_from
+            if search_request.filters.date_to:
+                end_timestamp = search_request.filters.date_to
+            if search_request.filters.chat_type:
+                chat_types = search_request.filters.chat_type
+        
+        # 执行搜索（使用新的高级搜索功能）
         search_results = meili_service.search(
             query=search_request.query,
-            filters=filters,
+            filters=filters,  # 保留原有的filters参数以确保向后兼容
             sort=sort,
             page=search_request.page,
-            hits_per_page=search_request.hits_per_page
+            hits_per_page=search_request.hits_per_page,
+            start_timestamp=start_timestamp,
+            end_timestamp=end_timestamp,
+            chat_types=chat_types
         )
         # 详细记录搜索结果原始数据
         logger.info(f"Meilisearch返回的estimatedTotalHits: {search_results.get('estimatedTotalHits', 0)}")
@@ -128,10 +234,14 @@ async def search_messages(
         # 处理搜索结果，确保符合响应模型
         hits = []
         for hit in search_results.get('hits', []):
-            # 创建文本摘要，如果原文太长则截断
+            # 创建文本摘要，优先使用高亮结果
             text = hit.get('text', '')
-            text_snippet = text[:200] + ('...' if len(text) > 200 else '')
             
+            # 检查是否有高亮信息
+            if '_formatted' in hit and 'text' in hit['_formatted']:
+                text_snippet = hit['_formatted']['text'][:300] + ('...' if len(hit['_formatted']['text']) > 300 else '')
+            else:
+                text_snippet = text[:200] + ('...' if len(text) > 200 else '')
             
             # 创建结果项
             hit_item = SearchResultItem(

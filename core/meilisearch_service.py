@@ -149,6 +149,21 @@ class MeiliSearchService:
         ])
         self.logger.info("已配置排序规则: ['words', 'typo', 'proximity', 'attribute', 'sort', 'exactness']")
         
+        # 配置高亮属性
+        self.index.update_displayed_attributes([
+            "id",
+            "message_id",
+            "chat_id",
+            "chat_title",
+            "chat_type",
+            "sender_id",
+            "sender_name",
+            "text",
+            "date",
+            "message_link"
+        ])
+        self.logger.info("已配置显示属性")
+        
         # 日志记录关于停用词和同义词
         self.logger.info("注意: stopWords(停用词)和synonyms(同义词)配置不在初始设置中，可通过单独的方法配置")
     
@@ -217,7 +232,9 @@ class MeiliSearchService:
         return result
     
     def search(self, query: str, filters: Optional[str] = None, sort: Optional[List[str]] = None,
-               page: int = 1, hits_per_page: int = 10) -> dict:
+               page: int = 1, hits_per_page: int = 10,
+               start_timestamp: Optional[int] = None, end_timestamp: Optional[int] = None,
+               chat_types: Optional[List[str]] = None, chat_ids: Optional[List[int]] = None) -> dict:
         """
         搜索消息
         
@@ -227,26 +244,77 @@ class MeiliSearchService:
             sort: 排序规则列表，例如 ["date:desc"]
             page: 页码，从 1 开始
             hits_per_page: 每页结果数
+            start_timestamp: 开始时间的 Unix 时间戳
+            end_timestamp: 结束时间的 Unix 时间戳
+            chat_types: 聊天类型列表，例如 ["group", "channel", "user"]
+            chat_ids: 聊天 ID 列表，例如 [12345, 67890]
             
         Returns:
             Meilisearch 的搜索结果字典
         """
+        # 构建过滤条件
+        filter_parts = []
+        
+        # 处理传入的 filters 参数
+        if filters:
+            filter_parts.append(f"({filters})")
+        
+        # 处理时间范围过滤
+        if start_timestamp is not None:
+            filter_parts.append(f"date >= {start_timestamp}")
+        if end_timestamp is not None:
+            filter_parts.append(f"date <= {end_timestamp}")
+        
+        # 处理聊天类型过滤
+        if chat_types:
+            # 验证聊天类型的有效性
+            valid_chat_types = {"user", "group", "channel"}
+            invalid_types = [t for t in chat_types if t not in valid_chat_types]
+            if invalid_types:
+                self.logger.warning(f"发现无效的聊天类型: {invalid_types}, 有效类型: {list(valid_chat_types)}")
+            
+            valid_types = [t for t in chat_types if t in valid_chat_types]
+            if valid_types:
+                chat_type_filters = [f'chat_type = "{chat_type}"' for chat_type in valid_types]
+                filter_parts.append(f"({' OR '.join(chat_type_filters)})")
+        
+        # 处理聊天ID过滤
+        if chat_ids:
+            # 确保所有ID都是整数
+            valid_chat_ids = []
+            for chat_id in chat_ids:
+                if isinstance(chat_id, int):
+                    valid_chat_ids.append(chat_id)
+                else:
+                    self.logger.warning(f"聊天ID必须是整数，忽略: {chat_id}")
+            
+            if valid_chat_ids:
+                chat_id_filters = [f"chat_id = {chat_id}" for chat_id in valid_chat_ids]
+                filter_parts.append(f"({' OR '.join(chat_id_filters)})")
+        
         # 构建搜索参数
         search_params: Dict[str, Any] = {
             "page": page,
-            "hitsPerPage": hits_per_page
+            "hitsPerPage": hits_per_page,
+            "attributesToHighlight": ["text"]
         }
         
-        # 添加过滤条件
-        if filters:
-            search_params["filter"] = filters
+        # 添加组合后的过滤条件
+        if filter_parts:
+            combined_filters = " AND ".join(filter_parts)
+            search_params["filter"] = combined_filters
+            self.logger.debug(f"组合过滤条件: {combined_filters}")
         
-        # 添加排序规则
+        # 添加排序规则（默认按日期降序）
         if sort:
             search_params["sort"] = sort
+        else:
+            search_params["sort"] = ["date:desc"]
         
         # 执行搜索
         self.logger.debug(f"执行搜索: 关键词='{query}', 参数={search_params}")
+        self.logger.debug(f"高级过滤参数: start_timestamp={start_timestamp}, end_timestamp={end_timestamp}, "
+                         f"chat_types={chat_types}, chat_ids={chat_ids}")
         results = self.index.search(query, search_params)
         
         # 记录原始搜索结果以便排查问题

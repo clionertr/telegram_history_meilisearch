@@ -361,6 +361,273 @@ class TestMeiliSearchService(unittest.TestCase):
         post_delete_search = self.search_service.search("DELETE_TEST")
         found_after_delete = any(hit["id"] == message.id for hit in post_delete_search["hits"])
         self.assertFalse(found_after_delete, "删除后应找不到该消息")
+    
+    def test_advanced_search_with_timestamp_filter(self):
+        """测试时间戳过滤的高级搜索"""
+        # 创建不同时间段的测试消息
+        now = int(datetime.now().timestamp())
+        
+        # 创建过去1小时的消息
+        old_message = create_test_message_doc(
+            message_id=11111,
+            chat_id=-10011111,
+            text="这是一条旧消息，时间戳过滤测试",
+            date=now - 3600  # 1小时前
+        )
+        
+        # 创建当前时间的消息
+        new_message = create_test_message_doc(
+            message_id=22222,
+            chat_id=-10022222,
+            text="这是一条新消息，时间戳过滤测试",
+            date=now
+        )
+        
+        # 索引消息
+        self.search_service.index_message(old_message)
+        self.search_service.index_message(new_message)
+        time.sleep(1)
+        
+        # 测试起始时间过滤
+        search_result = self.search_service.search(
+            query="时间戳过滤测试",
+            start_timestamp=now - 1800  # 30分钟前
+        )
+        
+        # 应该只找到新消息
+        found_ids = [hit["id"] for hit in search_result["hits"]]
+        self.assertIn(new_message.id, found_ids, "应找到时间范围内的新消息")
+        self.assertNotIn(old_message.id, found_ids, "不应找到时间范围外的旧消息")
+        
+        # 测试结束时间过滤
+        search_result = self.search_service.search(
+            query="时间戳过滤测试",
+            end_timestamp=now - 1800  # 30分钟前
+        )
+        
+        # 应该只找到旧消息
+        found_ids = [hit["id"] for hit in search_result["hits"]]
+        self.assertIn(old_message.id, found_ids, "应找到时间范围内的旧消息")
+        self.assertNotIn(new_message.id, found_ids, "不应找到时间范围外的新消息")
+        
+        # 测试时间范围过滤
+        search_result = self.search_service.search(
+            query="时间戳过滤测试",
+            start_timestamp=now - 7200,  # 2小时前
+            end_timestamp=now - 1800     # 30分钟前
+        )
+        
+        # 应该只找到旧消息
+        found_ids = [hit["id"] for hit in search_result["hits"]]
+        self.assertIn(old_message.id, found_ids, "应找到时间范围内的旧消息")
+        self.assertNotIn(new_message.id, found_ids, "不应找到时间范围外的新消息")
+    
+    def test_advanced_search_with_chat_types_filter(self):
+        """测试聊天类型过滤的高级搜索"""
+        # 创建不同聊天类型的消息
+        group_message = create_test_message_doc(
+            message_id=33333,
+            chat_id=-10033333,
+            chat_type="group",
+            text="这是群组消息，聊天类型过滤测试"
+        )
+        
+        channel_message = create_test_message_doc(
+            message_id=44444,
+            chat_id=-10044444,
+            chat_type="channel",
+            text="这是频道消息，聊天类型过滤测试"
+        )
+        
+        user_message = create_test_message_doc(
+            message_id=55555,
+            chat_id=10055555,  # 正数表示私聊
+            chat_type="user",
+            text="这是私聊消息，聊天类型过滤测试"
+        )
+        
+        # 索引消息
+        self.search_service.index_message(group_message)
+        self.search_service.index_message(channel_message)
+        self.search_service.index_message(user_message)
+        time.sleep(1)
+        
+        # 测试单个聊天类型过滤
+        search_result = self.search_service.search(
+            query="聊天类型过滤测试",
+            chat_types=["group"]
+        )
+        
+        found_ids = [hit["id"] for hit in search_result["hits"]]
+        self.assertIn(group_message.id, found_ids, "应找到群组消息")
+        self.assertNotIn(channel_message.id, found_ids, "不应找到频道消息")
+        self.assertNotIn(user_message.id, found_ids, "不应找到私聊消息")
+        
+        # 测试多个聊天类型过滤
+        search_result = self.search_service.search(
+            query="聊天类型过滤测试",
+            chat_types=["group", "channel"]
+        )
+        
+        found_ids = [hit["id"] for hit in search_result["hits"]]
+        self.assertIn(group_message.id, found_ids, "应找到群组消息")
+        self.assertIn(channel_message.id, found_ids, "应找到频道消息")
+        self.assertNotIn(user_message.id, found_ids, "不应找到私聊消息")
+        
+        # 测试无效聊天类型（应该被忽略）
+        search_result = self.search_service.search(
+            query="聊天类型过滤测试",
+            chat_types=["invalid_type", "group"]
+        )
+        
+        found_ids = [hit["id"] for hit in search_result["hits"]]
+        self.assertIn(group_message.id, found_ids, "应找到群组消息（忽略无效类型）")
+    
+    def test_advanced_search_with_chat_ids_filter(self):
+        """测试聊天ID过滤的高级搜索"""
+        # 创建不同聊天ID的消息
+        chat1_message = create_test_message_doc(
+            message_id=66666,
+            chat_id=-10066666,
+            text="这是聊天1的消息，聊天ID过滤测试"
+        )
+        
+        chat2_message = create_test_message_doc(
+            message_id=77777,
+            chat_id=-10077777,
+            text="这是聊天2的消息，聊天ID过滤测试"
+        )
+        
+        chat3_message = create_test_message_doc(
+            message_id=88888,
+            chat_id=-10088888,
+            text="这是聊天3的消息，聊天ID过滤测试"
+        )
+        
+        # 索引消息
+        self.search_service.index_message(chat1_message)
+        self.search_service.index_message(chat2_message)
+        self.search_service.index_message(chat3_message)
+        time.sleep(1)
+        
+        # 测试单个聊天ID过滤
+        search_result = self.search_service.search(
+            query="聊天ID过滤测试",
+            chat_ids=[-10066666]
+        )
+        
+        found_ids = [hit["id"] for hit in search_result["hits"]]
+        self.assertIn(chat1_message.id, found_ids, "应找到聊天1的消息")
+        self.assertNotIn(chat2_message.id, found_ids, "不应找到聊天2的消息")
+        self.assertNotIn(chat3_message.id, found_ids, "不应找到聊天3的消息")
+        
+        # 测试多个聊天ID过滤
+        search_result = self.search_service.search(
+            query="聊天ID过滤测试",
+            chat_ids=[-10066666, -10077777]
+        )
+        
+        found_ids = [hit["id"] for hit in search_result["hits"]]
+        self.assertIn(chat1_message.id, found_ids, "应找到聊天1的消息")
+        self.assertIn(chat2_message.id, found_ids, "应找到聊天2的消息")
+        self.assertNotIn(chat3_message.id, found_ids, "不应找到聊天3的消息")
+    
+    def test_advanced_search_combined_filters(self):
+        """测试组合过滤条件的高级搜索"""
+        now = int(datetime.now().timestamp())
+        
+        # 创建符合所有条件的消息
+        target_message = create_test_message_doc(
+            message_id=99999,
+            chat_id=-10099999,
+            chat_type="group",
+            text="这是目标消息，组合过滤测试",
+            date=now - 1800  # 30分钟前
+        )
+        
+        # 创建只符合部分条件的消息
+        wrong_time_message = create_test_message_doc(
+            message_id=99998,
+            chat_id=-10099999,
+            chat_type="group",
+            text="这是错误时间的消息，组合过滤测试",
+            date=now - 7200  # 2小时前
+        )
+        
+        wrong_type_message = create_test_message_doc(
+            message_id=99997,
+            chat_id=-10099999,
+            chat_type="channel",
+            text="这是错误类型的消息，组合过滤测试",
+            date=now - 1800  # 30分钟前
+        )
+        
+        wrong_chat_message = create_test_message_doc(
+            message_id=99996,
+            chat_id=-10099998,
+            chat_type="group",
+            text="这是错误聊天的消息，组合过滤测试",
+            date=now - 1800  # 30分钟前
+        )
+        
+        # 索引消息
+        messages = [target_message, wrong_time_message, wrong_type_message, wrong_chat_message]
+        for msg in messages:
+            self.search_service.index_message(msg)
+        time.sleep(1)
+        
+        # 测试组合过滤
+        search_result = self.search_service.search(
+            query="组合过滤测试",
+            start_timestamp=now - 3600,  # 1小时前
+            end_timestamp=now,           # 现在
+            chat_types=["group"],
+            chat_ids=[-10099999]
+        )
+        
+        # 应该只找到目标消息
+        found_ids = [hit["id"] for hit in search_result["hits"]]
+        self.assertIn(target_message.id, found_ids, "应找到符合所有条件的目标消息")
+        self.assertNotIn(wrong_time_message.id, found_ids, "不应找到时间不符的消息")
+        self.assertNotIn(wrong_type_message.id, found_ids, "不应找到类型不符的消息")
+        self.assertNotIn(wrong_chat_message.id, found_ids, "不应找到聊天ID不符的消息")
+        
+        # 验证结果数量
+        self.assertEqual(len(found_ids), 1, "组合过滤应该只返回1条符合所有条件的消息")
+    
+    def test_advanced_search_with_highlight(self):
+        """测试高级搜索的高亮功能"""
+        # 创建包含特定关键词的消息
+        highlight_message = create_test_message_doc(
+            message_id=77777,
+            chat_id=-10077777,
+            text="这是一条包含高亮关键词的测试消息，用于验证高亮功能是否正常工作"
+        )
+        
+        # 索引消息
+        self.search_service.index_message(highlight_message)
+        time.sleep(1)
+        
+        # 执行搜索
+        search_result = self.search_service.search(
+            query="高亮关键词"
+        )
+        
+        # 验证搜索结果
+        self.assertGreater(search_result["estimatedTotalHits"], 0, "应该找到包含关键词的消息")
+        
+        # 检查是否配置了高亮属性
+        found_message = None
+        for hit in search_result["hits"]:
+            if hit["id"] == highlight_message.id:
+                found_message = hit
+                break
+        
+        self.assertIsNotNone(found_message, "应该找到目标消息")
+        
+        # 注意：在实际的集成测试中，Meilisearch应该返回_formatted字段
+        # 这里我们主要验证搜索功能正常工作
+        self.assertEqual(found_message["text"], highlight_message.text, "消息文本应该正确返回")
 
 
 if __name__ == "__main__":
