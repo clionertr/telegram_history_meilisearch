@@ -31,6 +31,7 @@ class TestHistorySyncer(unittest.TestCase):
         
         self.mock_config_manager = MagicMock()
         self.mock_config_manager.get_whitelist = MagicMock(return_value=[123456, 789012])
+        self.mock_config_manager.get_oldest_sync_timestamp = MagicMock(return_value=None)  # 默认无限制
         
         self.mock_meili_service = MagicMock()
         self.mock_meili_service.index_messages_bulk = MagicMock(return_value={"taskUid": "mock-task-id"})
@@ -175,6 +176,55 @@ class TestHistorySyncer(unittest.TestCase):
         self.assertEqual(mock_build_message_doc.call_count, 1)
         # 确认是正确的消息
         self.assertEqual(mock_build_message_doc.call_args[0][0].id, 2002)
+        
+    @patch('user_bot.history_syncer.HistorySyncer._build_message_doc')
+    @patch('telethon.client.messages.MessageMethods.iter_messages')
+    async def test_oldest_sync_timestamp_limit(self, mock_iter_messages, mock_build_message_doc):
+        """测试最旧同步时间戳限制功能"""
+        chat_id = 123456
+        now = datetime.now()
+        
+        # 设置模拟消息
+        mock_message1 = MagicMock()  # 最旧的消息（应被过滤）
+        mock_message1.id = 1001
+        mock_message1.text = "旧消息"
+        mock_message1.date = now - timedelta(days=10)
+        
+        mock_message2 = MagicMock()  # 较新消息（应包含）
+        mock_message2.id = 1002
+        mock_message2.text = "新消息"
+        mock_message2.date = now - timedelta(days=2)
+        
+        # 设置模拟迭代器返回所有消息
+        mock_iter_messages.return_value = [mock_message2, mock_message1]
+        
+        # 模拟_build_message_doc返回有效的消息文档
+        mock_build_message_doc.side_effect = lambda msg, *args, **kwargs: MagicMock(
+            id=f"{chat_id}_{msg.id}",
+            message_id=msg.id,
+            text=msg.text
+        )
+        
+        # 模拟获取聊天实体
+        self.mock_client.get_client.return_value.get_entity = AsyncMock(return_value=MagicMock(
+            id=chat_id,
+            title="测试聊天"
+        ))
+        
+        # 设置最旧同步时间戳（5天前）
+        oldest_timestamp = now - timedelta(days=5)
+        self.mock_config_manager.get_oldest_sync_timestamp.return_value = oldest_timestamp
+        
+        # 执行同步
+        processed_count, indexed_count = await self.syncer.sync_chat_history(chat_id)
+        
+        # 验证是否正确传递了参数
+        self.mock_config_manager.get_oldest_sync_timestamp.assert_called_once_with(chat_id)
+        
+        # 应该只有一条消息被处理（较新的消息2）
+        self.assertEqual(mock_build_message_doc.call_count, 1)
+        # 确认是正确的消息
+        self.assertEqual(mock_build_message_doc.call_args[0][0].id, 1002)
 
 
 if __name__ == "__main__":

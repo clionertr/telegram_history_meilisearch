@@ -1,325 +1,242 @@
-# NexusCore 指令：启动阶段 3 - 任务 2：完善前端功能
+# Subtask: Implement "Oldest Sync Timestamp" Feature
 
-此文件将由 AI 子任务（💻 Code 模式）用于记录其详细工作流程。
-# 前端筛选功能实现 - 工作日志
+This log will detail the steps taken by the 💻 Code mode to implement the feature allowing users to set an oldest sync time for message caching.
 
-## 1. 分析当前代码结构和功能需求
+---
 
-### 当前状态:
-- **API服务 (api.js)** 中的 `searchMessages` 函数已预留了 `filters` 参数支持。
-- **状态管理 (searchStore.js)** 已包含筛选状态和相关更新方法:
-  ```javascript
-  // 筛选条件
-  filters: {
-    chat_type: [],     // 聊天类型数组，可选值: "user", "group", "channel"
-    date_from: null,   // 起始日期时间戳
-    date_to: null,     // 结束日期时间戳
-  },
-  ```
-- **搜索页面 (SearchPage.jsx)** 当前布局仅包含搜索栏和结果列表。
-- **搜索栏 (SearchBar.jsx)** 已实现基本的搜索功能，但没有筛选UI。
+## 1. 初步分析与理解
 
-### 需要实现的功能:
-1. 添加消息来源类别(Chat Type)筛选UI控件
-2. 添加时间段(Date Range)筛选UI控件 
-3. 确保筛选条件在搜索时正确传递给API
-4. 将日期正确转换为Unix时间戳
+### 1.1 功能概述
 
-## 2. 实现方案
+"最旧同步时间"(Oldest Sync Timestamp)功能允许用户设置一个截止日期，早于这个日期的历史消息将不会被缓存。这个设置可以全局生效，也可以针对特定的聊天（群组/私聊/频道）生效。
 
-我计划创建一个新的 `FilterControls.jsx` 组件，并将其添加到 `SearchPage.jsx` 中。这个组件将使用 `useSearchStore` 中的状态和方法来管理筛选条件。
+### 1.2 需要修改的文件
 
-### 实现步骤:
-1. 创建 FilterControls 组件，包含来源和时间筛选UI
-2. 将组件添加到 SearchPage 中
-3. 测试功能的正确性
-## 3. 查看现有组件和UI样式
+1. `whitelist.json` - 添加新的配置结构
+2. `core/config_manager.py` - 更新配置管理器以支持新的配置结构
+3. `user_bot/history_syncer.py` - 修改同步逻辑以考虑最旧同步时间限制
+4. `FOLLOWME.md` - 更新设计文档
+5. 可能需要查看 `main.py` 是否需要调整（通过分析确认）
 
-在实现FilterControls组件之前，我查看了现有组件的实现，特别是结果列表组件（ResultsList.jsx）。这个组件展示了如何处理Telegram主题样式，通过从useTelegramSDK获取themeParams来动态应用样式。我将在FilterControls组件中采用类似的方法，保持UI风格一致性。
+### 1.3 当前代码分析
 
-ResultsList.jsx为UI元素使用了以下样式特点：
-- 根据Telegram主题动态调整颜色和样式
-- 使用圆角边框（rounded）
-- 适当的内边距（padding）和外边距（margin）
-- 有状态的按钮样式（禁用状态时透明度降低）
+- `whitelist.json` 当前是一个简单的JSON文件，包含一个"whitelist"数组和"updated_at"字段
+- `core/config_manager.py` 提供了配置管理功能，包括加载和管理白名单
+- `user_bot/history_syncer.py` 包含了消息同步的核心逻辑
+- `main.py` 是应用程序的主入口，初始化和管理各个组件
 
-## 4. 实现FilterControls组件
+## 2. 实现计划
 
-现在开始实现FilterControls组件，该组件需要包含：
-1. 消息来源类别筛选（复选框）
-2. 时间段筛选（日期选择器）
+### 2.1 修改 `whitelist.json` 格式
 
-让我创建一个新的`frontend/src/components/FilterControls.jsx`文件：
-### 4.1 FilterControls组件实现细节
-
-已成功创建了`frontend/src/components/FilterControls.jsx`组件。该组件主要功能包括：
-
-1. **UI布局与交互：**
-   - 可展开/折叠的筛选面板设计
-   - 当有筛选条件应用时显示"已筛选"标志
-   - 折叠状态下简洁显示当前应用的筛选条件
-
-2. **消息来源类别筛选：**
-   - 使用复选框让用户选择一个或多个聊天类型（私聊、群组、频道）
-   - 对应的值为 "user", "group", "channel"
-
-3. **时间段筛选：**
-   - 使用HTML5原生日期选择器让用户选择开始和结束日期
-   - 实现日期范围限制（开始日期不能晚于结束日期，结束日期不能早于开始日期）
-   - 将用户选择的日期转换为Unix时间戳（秒级）再提交给后端API
-
-4. **筛选操作：**
-   - "应用筛选"按钮 - 将当前UI中的筛选条件应用到搜索
-   - "清空筛选"按钮 - 清除所有筛选条件
-   - 筛选操作会重置搜索结果到第1页
-
-5. **Telegram主题集成：**
-   - 与现有组件保持一致的风格
-   - 使用`useTelegramSDK`钩子获取主题参数，动态调整UI样式
-
-6. **状态管理集成：**
-   - 使用`useSearchStore`中的`filters`状态和`setFilters`方法
-   - 支持本地状态和store状态的双向同步
-
-### 4.2 将FilterControls集成到SearchPage
-
-更新了`frontend/src/pages/SearchPage.jsx`，在搜索栏和结果列表之间添加了筛选控件组件。
-
-```jsx
-import { useEffect } from 'react';
-import SearchBar from '../components/SearchBar';
-import FilterControls from '../components/FilterControls';
-import ResultsList from '../components/ResultsList';
-// ...
-
-<main>
-  {/* 搜索栏 */}
-  <SearchBar />
-  
-  {/* 筛选控件 */}
-  <FilterControls />
-  
-  {/* 搜索结果列表 */}
-  <ResultsList />
-</main>
-```
-
-## 5. 已完成的功能
-
-现在的前端筛选功能已经完成了以下需求：
-
-1. **在前端界面添加按来源和时间筛选的UI控件：**
-   - 在SearchPage添加了FilterControls组件
-   - 支持选择多个消息来源类别
-   - 支持选择时间段范围
-
-2. **更新前端API调用以包含新的筛选参数：**
-   - searchStore.js中已有相关逻辑，只需增加UI控件
-   - 正确处理了日期到Unix时间戳的转换
-
-3. **测试功能：**
-   - 筛选UI的交互逻辑已实现
-   - 筛选条件正确传递给了API调用
-## 6. 修复关键词高亮问题
-
-发现前端没有正确渲染搜索结果中的高亮关键词。后端API返回的搜索结果中包含`<em>`标签来标记关键词，但这些HTML标签直接显示为文本而不是被解析。
-
-### 6.1 问题分析
-
-`ResultItem.jsx`组件中，`text_snippet`字段直接作为文本内容渲染：
-```jsx
-<p className="mb-3 whitespace-pre-line" style={contentStyle}>
-  {text_snippet || '无消息内容'}
-</p>
-```
-
-这导致HTML标签被当作纯文本显示，例如`<em>`关键词`</em>`会直接显示，而不是被解释为高亮元素。
-
-### 6.2 修复方案
-
-1. 修改`ResultItem.jsx`组件，使用`dangerouslySetInnerHTML`属性来渲染HTML内容：
-
-```jsx
-<p 
-  className="mb-3 whitespace-pre-line result-content" 
-  style={contentStyle}
-  dangerouslySetInnerHTML={{
-    __html: text_snippet || '无消息内容'
-  }}
-/>
-```
-
-2. 添加CSS样式，使高亮文本更加明显：
-
-```jsx
-// 高亮样式
-const highlightStyles = `
-  .result-content em {
-    font-style: normal;
-    font-weight: bold;
-    ${isAvailable && themeParams 
-      ? `background-color: ${themeParams.accent_color || 'rgba(59, 130, 246, 0.2)'};
-         color: ${themeParams.accent_text_color || themeParams.text_color};` 
-      : 'background-color: rgba(59, 130, 246, 0.2);'
+添加新的 `sync_settings` 字段，支持以下结构：
+```json
+{
+    "whitelist": [-1001926579047],
+    "updated_at": null,
+    "sync_settings": {
+        "global_oldest_sync_timestamp": "2024-01-01T00:00:00Z",
+        "-1001926579047": {
+            "oldest_sync_timestamp": "2025-01-01T00:00:00Z"
+        }
     }
-    padding: 0 2px;
-    border-radius: 2px;
-  }
-`;
+}
 ```
 
-3. 在组件中添加样式标签：
-```jsx
-<style>{highlightStyles}</style>
+### 2.2 更新 `ConfigManager` 类
+
+1. 修改 `load_whitelist` 方法以加载新的 `sync_settings` 字段
+2. 添加新方法 `get_oldest_sync_timestamp(chat_id)` 用于获取特定聊天的最旧同步时间
+3. 更新 `save_whitelist` 方法以保存新的配置结构
+
+### 2.3 修改 `HistorySyncer` 类
+
+更新 `sync_chat_history` 和 `initial_sync_all_whitelisted_chats` 方法，以在同步过程中考虑最旧同步时间限制。
+
+### 2.4 更新设计文档
+
+在 `FOLLOWME.md` 中添加关于"最旧同步时间"功能的描述。
+
+### 2.5 编写单元测试
+
+为新增和修改的功能编写单元测试，确保功能正确性和代码质量。
+
+## 3. 实现过程
+
+### 3.1 检查相关文件
+
+我已经检查了以下关键文件，了解了当前的代码结构和功能：
+
+1. `whitelist.json` - 当前是一个简单的JSON文件，包含白名单ID列表和更新时间
+2. `core/config_manager.py` - 包含 `ConfigManager` 类，负责加载和管理配置
+3. `user_bot/history_syncer.py` - 包含 `HistorySyncer` 类，负责同步历史消息
+4. `main.py` - 应用程序入口点
+5. `FOLLOWME.md` - 项目设计文档
+6. 相关单元测试文件
+
+### 3.2 修改 ConfigManager
+
+我已更新 `core/config_manager.py` 文件，添加了以下功能：
+
+1. 引入 `dateutil` 库用于解析 ISO 8601 日期格式
+2. 在 `ConfigManager` 类中添加 `sync_settings` 字段以存储同步配置
+3. 修改 `load_whitelist()` 方法以加载 `sync_settings` 配置
+4. 修改 `save_whitelist()` 方法以保存 `sync_settings` 配置
+5. 添加 `get_oldest_sync_timestamp(chat_id)` 方法，根据聊天ID返回适用的最旧同步时间戳
+6. 添加 `_parse_timestamp()` 辅助方法解析时间戳值
+7. 添加 `set_oldest_sync_timestamp(chat_id, timestamp)` 方法，用于设置全局或聊天特定的最旧同步时间戳
+
+这些修改使 `ConfigManager` 能够管理和提供最旧同步时间戳信息，支持两种配置方式：
+- 全局设置：适用于所有聊天
+- 聊天特定设置：仅适用于指定的聊天
+
+### 3.3 修改 HistorySyncer
+
+我已更新 `user_bot/history_syncer.py`，实现了以下功能：
+
+1. 在 `sync_chat_history` 方法中添加对 `get_oldest_sync_timestamp` 的调用，获取适用于当前聊天的最旧同步时间戳
+2. 在历史消息迭代过程中检查每条消息的日期，如果早于最旧同步时间戳，则停止向前同步
+3. 添加相应的日志记录，以便于跟踪和调试
+
+这些修改使同步过程能够在遇到早于最旧同步时间戳的消息时停止，从而避免缓存过于久远的消息。
+
+### 3.4 更新单元测试
+
+我已经更新了以下单元测试文件：
+
+#### 3.4.1 修改 `tests/unit/test_config_manager.py`
+
+为 `ConfigManager` 类添加了两个新的测试方法：
+1. `test_oldest_sync_timestamp` - 测试设置和获取最旧同步时间戳的功能
+2. `test_timestamp_parser` - 测试时间戳解析功能
+
+这些测试验证了：
+- 获取全局和聊天特定时间戳的功能
+- 使用不同格式（ISO 8601字符串、datetime对象、Unix时间戳）设置时间戳
+- 删除时间戳设置的功能
+- 时间戳解析的准确性
+
+#### 3.4.2 修改 `tests/unit/test_history_syncer.py`
+
+添加了新的测试方法 `test_oldest_sync_timestamp_limit`，测试历史同步器在遇到早于最旧同步时间戳的消息时是否会停止同步。
+
+测试用例模拟了两条消息：
+- 一条较新的消息（在最旧同步时间戳之后）
+- 一条较旧的消息（在最旧同步时间戳之前）
+
+验证了同步器只处理最旧同步时间戳之后的消息。
+
+### 3.5 检查依赖项
+
+由于我在 `ConfigManager` 中使用了 `dateutil` 库来解析 ISO 8601 日期格式，需要确保这个库在项目依赖中。检查后发现 `requirements.txt` 文件中没有包含这个依赖，因此我已经将 `python-dateutil` 添加到依赖列表中。
+
+### 3.6 更新设计文档
+
+我已经更新了 `FOLLOWME.md` 设计文档，添加了关于"最旧同步时间"功能的描述：
+
+1. 在 `1.1 用户需求` -> `次要功能 (V2)` 部分，添加了关于"最旧同步时间"功能的描述。
+2. 在 `4.1.3 Core 模块 (core/)` -> `config_manager.py` 部分，描述了新增的用于处理 `oldest_sync_timestamp` 的逻辑和方法。
+3. 在 `4.1.1 Userbot 模块 (user_bot/)` -> `history_syncer.py` 部分，描述了其如何使用 `oldest_sync_timestamp` 来限制历史消息的同步范围。
+
+## 4. 最终实现结果
+
+### 4.1 更新后的 `whitelist.json` 示例
+
+以下是更新后的 `whitelist.json` 文件示例，展示了新增的 `sync_settings` 结构：
+
+```json
+{
+    "whitelist": [-1001926579047, -1001234567890],
+    "updated_at": 1714898400,
+    "sync_settings": {
+        "global_oldest_sync_timestamp": "2024-01-01T00:00:00Z",
+        "-1001926579047": {
+            "oldest_sync_timestamp": "2025-01-01T00:00:00Z"
+        }
+    }
+}
 ```
 
-4. 为包含内容的段落添加`result-content`类，以应用高亮样式：
-```jsx
-<p className="mb-3 whitespace-pre-line result-content" ... />
-```
+在这个例子中：
 
-### 6.3 效果
+- `sync_settings` 字段包含全局设置和特定聊天的设置
+- 全局设置 `global_oldest_sync_timestamp` 适用于所有聊天，设置为 "2024-01-01T00:00:00Z"
+- 聊天 `-1001926579047` 有特定设置，其 `oldest_sync_timestamp` 为 "2025-01-01T00:00:00Z"
+- 聊天 `-1001234567890` 没有特定设置，将使用全局设置
 
-现在搜索结果中的关键词会以高亮样式显示，颜色根据Telegram主题动态调整。高亮文本具有以下特点：
-- 粗体显示（不使用斜体）
-- 带有背景色
-- 轻微的内边距和圆角
-- 与Telegram主题颜色相协调
-## 7. 添加额外功能
+### 4.2 实现的功能概述
 
-根据用户反馈，需要添加两个额外功能：
-1. 为日期筛选设置默认值
-2. 实现筛选条件的自动应用
+1. **配置管理**
+   - 添加了新的配置结构支持，允许设置全局和聊天特定的最旧同步时间戳
+   - 支持ISO 8601格式的日期时间字符串和Unix时间戳两种格式
+   - 提供API用于获取和设置最旧同步时间戳
 
-### 7.1 默认日期范围设置
+2. **历史同步限制**
+   - 历史同步器在遍历消息时检查消息日期，当遇到早于最旧同步时间戳的消息时停止同步
+   - 添加了适当的日志记录，便于追踪同步过程和限制原因
 
-添加了默认日期范围计算逻辑，设置初始筛选条件：
-- 结束日期默认设置为明天
-- 开始日期默认设置为当前日期往前推三个月
+3. **依赖管理**
+   - 添加了`python-dateutil`依赖以支持ISO 8601日期格式的解析
 
-实现代码：
-```javascript
-// 计算默认日期
-const getDefaultDates = () => {
-  // 结束日期默认为明天
-  const tomorrow = new Date();
-  tomorrow.setDate(tomorrow.getDate() + 1);
-  const defaultDateTo = tomorrow.toISOString().split('T')[0];
-  
-  // 开始日期默认为三个月前
-  const threeMonthsAgo = new Date();
-  threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
-  const defaultDateFrom = threeMonthsAgo.toISOString().split('T')[0];
-  
-  return { defaultDateFrom, defaultDateTo };
-};
-```
+### 4.3 添加用户接口
 
-在组件挂载时应用这些默认值：
-```javascript
-useEffect(() => {
-  if (!filters.date_from && !filters.date_to && (!filters.chat_type || filters.chat_type.length === 0)) {
-    // 将日期字符串转换为Unix时间戳（秒级）
-    const dateFromTimestamp = Math.floor(new Date(defaultDateFrom).getTime() / 1000);
-    const dateToTimestamp = Math.floor(new Date(defaultDateTo + 'T23:59:59').getTime() / 1000);
-    
-    // 更新store中的filters
-    setFilters({
-      chat_type: [],
-      date_from: dateFromTimestamp,
-      date_to: dateToTimestamp
-    });
-  }
-}, []);  // 仅在组件挂载时运行一次
-```
+我已经添加了两种管理"最旧同步时间"功能的接口：
 
-### 7.2 自动应用筛选
+#### 4.3.1 API接口
 
-修改了筛选条件的处理逻辑，使其在用户更改任何筛选选项时自动应用，而不需要点击"应用筛选"按钮：
+在 `api/routers/whitelist.py` 中添加了以下端点：
 
-1. 提取了应用筛选的核心逻辑到一个可复用函数：
-```javascript
-const applyFiltersWithValues = (filterValues) => {
-  // 将日期字符串转换为Unix时间戳（秒级）
-  const dateFromTimestamp = filterValues.date_from
-    ? Math.floor(new Date(filterValues.date_from).getTime() / 1000)
-    : null;
-  
-  const dateToTimestamp = filterValues.date_to
-    ? Math.floor(new Date(filterValues.date_to + 'T23:59:59').getTime() / 1000)
-    : null;
-  
-  // 准备筛选条件对象
-  const newFilters = {
-    chat_type: filterValues.chat_type.length > 0 ? filterValues.chat_type : [],
-    date_from: dateFromTimestamp,
-    date_to: dateToTimestamp
-  };
-  
-  // 更新store中的filters并触发搜索
-  setFilters(newFilters);
-  fetchResults(undefined, 1); // 重置到第一页
-};
-```
+1. `GET /admin/whitelist/sync_settings` - 获取所有同步设置
+2. `PUT /admin/whitelist/sync_settings/global` - 设置全局最旧同步时间戳
+3. `PUT /admin/whitelist/sync_settings/chat/{chat_id}` - 设置特定聊天的最旧同步时间戳
+4. `GET /admin/whitelist/sync_settings/chat/{chat_id}` - 获取特定聊天的最旧同步时间戳
 
-2. 修改了输入处理函数，实现自动应用：
-```javascript
-const handleChatTypeChange = (type, checked) => {
-  const updatedChatTypes = checked
-    ? [...localFilters.chat_type, type]
-    : localFilters.chat_type.filter(t => t !== type);
-  
-  const updatedFilters = {
-    ...localFilters,
-    chat_type: updatedChatTypes
-  };
-  
-  setLocalFilters(updatedFilters);
-  
-  // 自动应用筛选
-  applyFiltersWithValues(updatedFilters);
-};
+这些API端点支持JSON格式的请求和响应，可以与前端应用集成。
 
-const handleDateChange = (field, value) => {
-  const updatedFilters = {
-    ...localFilters,
-    [field]: value
-  };
-  
-  setLocalFilters(updatedFilters);
-  
-  // 自动应用筛选
-  applyFiltersWithValues(updatedFilters);
-};
-```
+#### 4.3.2 命令行接口
 
-3. 更新了UI：
-   - 移除了"应用筛选"按钮
-   - 更新了提示文本，说明筛选条件会自动应用
-   - 保留了"清空筛选"按钮，方便用户快速重置所有筛选条件
+在 `search_bot/command_handlers.py` 中添加了以下命令：
 
-## 8. 最终功能总结
+1. `/set_oldest_sync_time [chat_id] <timestamp>` - 设置全局或特定聊天的最旧同步时间戳
+   - 例如：`/set_oldest_sync_time 2023-01-01T00:00:00Z` (设置全局)
+   - 例如：`/set_oldest_sync_time -1001234567890 2023-01-01T00:00:00Z` (设置特定聊天)
+   - 支持移除设置：`/set_oldest_sync_time remove` 或 `/set_oldest_sync_time -1001234567890 remove`
 
-现在前端筛选功能已完全实现，包括：
+2. `/view_oldest_sync_time [chat_id]` - 查看全局或特定聊天的最旧同步时间设置
+   - 例如：`/view_oldest_sync_time` (查看所有设置)
+   - 例如：`/view_oldest_sync_time -1001234567890` (查看特定聊天设置)
 
-1. **消息来源类别筛选：**
-   - 支持通过复选框选择多个聊天类型：私聊、群组、频道
+这些命令使管理员可以直接通过Telegram机器人管理同步时间设置，无需访问API。
 
-2. **时间段筛选：**
-   - 使用日期选择器选择开始日期和结束日期
-   - 默认设置结束日期为明天，开始日期为三个月前
-   - 日期自动转换为API需要的Unix时间戳格式
+### 4.4 总结
 
-3. **筛选条件自动应用：**
-   - 更改任何筛选选项时自动触发搜索
-   - 提供清空筛选按钮，方便用户重置
+"最旧同步时间"功能已成功实现，并提供了灵活的配置和管理选项：
 
-4. **关键词高亮显示：**
-   - 正确解析和渲染API返回的高亮标记
-   - 美化高亮样式，使关键词更加突出
-   - 样式与Telegram主题集成
+- 配置方面：
+  - 设置全局最旧同步时间，适用于所有聊天
+  - 为特定聊天设置独立的最旧同步时间，覆盖全局设置
+  - 支持多种时间格式，便于用户配置
+  - 有效减少缓存过于久远消息的存储需求，提高系统效率
 
-5. **用户体验优化：**
-   - 可折叠的筛选面板设计
-   - 当有筛选条件应用时显示提示标志
-   - 适配响应式布局
+- 接口方面：
+  - 提供RESTful API接口，便于集成到前端应用
+  - 提供Telegram Bot命令接口，便于管理员直接管理
+  - 支持查看、设置和删除操作
+
+### 4.5 文档更新
+
+我已更新了搜索机器人的帮助文档，在 `/help` 命令的输出中添加了有关"最旧同步时间"功能的详细说明：
+
+1. 添加了可用命令的说明：
+   - `/set_oldest_sync_time` - 设置全局或特定聊天的最旧同步时间戳
+   - `/view_oldest_sync_time` - 查看当前的最旧同步时间设置
+
+2. 提供了具体的使用示例：
+   - 设置全局时间戳
+   - 设置特定聊天的时间戳
+   - 移除设置
+   - 查看所有设置或特定聊天设置
+
+3. 添加了关于功能用途的说明，帮助用户理解这个功能的价值
+
+这些文档更新使管理员能够更容易地理解和使用这个新功能，从而有效管理历史消息的同步范围。

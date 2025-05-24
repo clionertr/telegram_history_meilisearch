@@ -13,6 +13,7 @@ import json
 import unittest
 import tempfile
 import shutil
+from datetime import datetime, timedelta
 from pathlib import Path
 from unittest.mock import patch, MagicMock
 
@@ -225,6 +226,116 @@ class TestConfigManager(unittest.TestCase):
         # 白名单应该为空列表
         self.assertEqual(len(config_manager.get_whitelist()), 0)
 
+    def test_oldest_sync_timestamp(self):
+        """测试最旧同步时间戳功能"""
+        # 创建新的临时配置文件
+        test_dir = os.path.join(self.temp_dir, "test_sync_timestamp")
+        os.makedirs(test_dir, exist_ok=True)
+        
+        whitelist_path = os.path.join(test_dir, "whitelist.json")
+        
+        # 创建包含sync_settings的白名单文件
+        with open(whitelist_path, "w", encoding="utf-8") as f:
+            json.dump({
+                "whitelist": [123456, -789012],
+                "updated_at": None,
+                "sync_settings": {
+                    "global_oldest_sync_timestamp": "2024-01-01T00:00:00Z",
+                    "-789012": {
+                        "oldest_sync_timestamp": "2025-01-01T00:00:00Z"
+                    }
+                }
+            }, f)
+        
+        # 创建ConfigManager实例
+        config_manager = ConfigManager(
+            env_path=self.env_path,
+            config_path=self.config_path,
+            whitelist_path=whitelist_path
+        )
+        
+        # 测试全局时间戳
+        global_timestamp = config_manager.get_oldest_sync_timestamp(123456)
+        self.assertIsNotNone(global_timestamp)
+        self.assertEqual(global_timestamp.year, 2024)
+        self.assertEqual(global_timestamp.month, 1)
+        self.assertEqual(global_timestamp.day, 1)
+        
+        # 测试聊天特定时间戳（应该覆盖全局时间戳）
+        chat_timestamp = config_manager.get_oldest_sync_timestamp(-789012)
+        self.assertIsNotNone(chat_timestamp)
+        self.assertEqual(chat_timestamp.year, 2025)
+        self.assertEqual(chat_timestamp.month, 1)
+        self.assertEqual(chat_timestamp.day, 1)
+        
+        # 测试为不存在的聊天设置时间戳
+        result = config_manager.set_oldest_sync_timestamp(999999, "2023-06-15T10:00:00Z")
+        self.assertTrue(result)
+        
+        # 确认设置成功
+        new_timestamp = config_manager.get_oldest_sync_timestamp(999999)
+        self.assertIsNotNone(new_timestamp)
+        self.assertEqual(new_timestamp.year, 2023)
+        self.assertEqual(new_timestamp.month, 6)
+        self.assertEqual(new_timestamp.day, 15)
+        
+        # 测试使用datetime对象设置时间戳
+        test_dt = datetime.now() - timedelta(days=30)  # 30天前
+        result = config_manager.set_oldest_sync_timestamp(123456, test_dt)
+        self.assertTrue(result)
+        
+        # 确认设置成功
+        dt_timestamp = config_manager.get_oldest_sync_timestamp(123456)
+        self.assertIsNotNone(dt_timestamp)
+        # 验证年月日是否匹配（忽略时间部分的微小差异）
+        self.assertEqual(dt_timestamp.year, test_dt.year)
+        self.assertEqual(dt_timestamp.month, test_dt.month)
+        self.assertEqual(dt_timestamp.day, test_dt.day)
+        
+        # 测试删除时间戳设置（通过设置为None）
+        result = config_manager.set_oldest_sync_timestamp(123456, None)
+        self.assertTrue(result)
+        
+        # 验证删除后应当返回全局设置
+        after_delete = config_manager.get_oldest_sync_timestamp(123456)
+        self.assertIsNotNone(after_delete)  # 仍应返回全局设置
+        self.assertEqual(after_delete.year, 2024)
+        self.assertEqual(after_delete.month, 1)
+        
+        # 测试删除全局设置
+        result = config_manager.set_oldest_sync_timestamp(None, None)  # chat_id=None 表示全局
+        self.assertTrue(result)
+        
+        # 验证全局设置被删除
+        self.assertIsNone(config_manager.get_oldest_sync_timestamp(123456))  # 特定聊天设置已删除，全局也已删除
+        self.assertIsNotNone(config_manager.get_oldest_sync_timestamp(-789012))  # 此聊天有特定设置，不受影响
+    
+    def test_timestamp_parser(self):
+        """测试时间戳解析功能"""
+        config_manager = self.config_manager
+        
+        # 测试ISO字符串解析
+        iso_str = "2024-03-15T08:30:00Z"
+        dt = config_manager._parse_timestamp(iso_str)
+        self.assertEqual(dt.year, 2024)
+        self.assertEqual(dt.month, 3)
+        self.assertEqual(dt.day, 15)
+        self.assertEqual(dt.hour, 8)
+        self.assertEqual(dt.minute, 30)
+        
+        # 测试Unix时间戳解析（整数）
+        unix_ts = 1714898400  # 2024-05-05 12:00:00 UTC
+        dt = config_manager._parse_timestamp(unix_ts)
+        self.assertEqual(dt.year, 2024)
+        self.assertEqual(dt.month, 5)
+        self.assertEqual(dt.day, 5)
+        
+        # 测试处理None值
+        self.assertIsNone(config_manager._parse_timestamp(None))
+        
+        # 测试处理错误格式
+        self.assertIsNone(config_manager._parse_timestamp("not-a-date"))
+    
     @patch('logging.Logger.warning')
     def test_missing_files_warnings(self, mock_warning):
         """测试缺失文件时的警告日志"""

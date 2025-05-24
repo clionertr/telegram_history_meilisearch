@@ -17,6 +17,7 @@ from pathlib import Path
 from typing import Dict, List, Any, Optional, Union, Tuple
 from configparser import ConfigParser
 import dotenv
+from dateutil import parser as date_parser
 
 
 class UserBotConfigError(Exception):
@@ -70,6 +71,7 @@ class ConfigManager:
         self.userbot_env_vars: Dict[str, str] = {}
         self.config = ConfigParser()
         self.whitelist: List[int] = []
+        self.sync_settings: Dict[str, Any] = {}
 
         # Search Bot Cache Config - Defaults
         self.enable_search_cache: bool = True
@@ -315,17 +317,32 @@ USER_SESSION_NAME=user_bot_session
             try:
                 with open(self.whitelist_path, "r", encoding="utf-8") as f:
                     data = json.load(f)
-                    if isinstance(data, dict) and "whitelist" in data:
-                        self.whitelist = data["whitelist"]
+                    if isinstance(data, dict):
+                        # 加载白名单
+                        if "whitelist" in data:
+                            self.whitelist = data["whitelist"]
+                        else:
+                            self.whitelist = []
+                            self.logger.warning(f"白名单文件 {self.whitelist_path} 缺少whitelist字段，已初始化为空白名单")
+                        
+                        # 加载同步设置
+                        if "sync_settings" in data:
+                            self.sync_settings = data["sync_settings"]
+                        else:
+                            self.sync_settings = {}
+                            self.logger.debug(f"白名单文件 {self.whitelist_path} 中未找到sync_settings字段，已初始化为空配置")
                     else:
                         self.whitelist = []
+                        self.sync_settings = {}
                         self.logger.warning(f"白名单文件 {self.whitelist_path} 格式错误，已初始化为空白名单")
                 self.logger.info(f"从 {self.whitelist_path} 加载白名单，共 {len(self.whitelist)} 个ID")
             except Exception as e:
                 self.whitelist = []
+                self.sync_settings = {}
                 self.logger.error(f"加载白名单文件 {self.whitelist_path} 时出错: {e}")
         else:
             self.whitelist = []
+            self.sync_settings = {}
             self.logger.warning(f"{self.whitelist_path} 文件不存在，已初始化为空白名单")
 
     def save_whitelist(self) -> None:
@@ -338,6 +355,10 @@ USER_SESSION_NAME=user_bot_session
             "whitelist": self.whitelist,
             "updated_at": Path(self.whitelist_path).stat().st_mtime if os.path.exists(self.whitelist_path) else None
         }
+        
+        # 添加同步设置
+        if self.sync_settings:
+            data["sync_settings"] = self.sync_settings
         
         with open(self.whitelist_path, "w", encoding="utf-8") as f:
             json.dump(data, f, indent=4, ensure_ascii=False)
@@ -443,6 +464,138 @@ USER_SESSION_NAME=user_bot_session
     def get_search_cache_initial_fetch_count(self) -> int:
         """获取搜索缓存首次获取的条目数"""
         return self.search_cache_initial_fetch_count
+
+    def get_oldest_sync_timestamp(self, chat_id: int) -> Optional[datetime]:
+        """
+        获取指定聊天的最旧同步时间戳
+
+        首先检查是否有针对该chat_id的特定设置，如果没有则返回全局设置，
+        如果都没有则返回None（表示无限制）
+
+        Args:
+            chat_id: 聊天ID
+
+        Returns:
+            datetime: 最旧同步时间（datetime对象），如果未设置则返回None
+        """
+        chat_id_str = str(chat_id)  # JSON中键必须是字符串
+
+        # 1. 检查是否有针对特定聊天的设置
+        if (self.sync_settings and
+            chat_id_str in self.sync_settings and
+            isinstance(self.sync_settings[chat_id_str], dict) and
+            "oldest_sync_timestamp" in self.sync_settings[chat_id_str]):
+            
+            timestamp_value = self.sync_settings[chat_id_str]["oldest_sync_timestamp"]
+            return self._parse_timestamp(timestamp_value)
+        
+        # 2. 检查是否有全局设置
+        if (self.sync_settings and
+            "global_oldest_sync_timestamp" in self.sync_settings):
+            
+            timestamp_value = self.sync_settings["global_oldest_sync_timestamp"]
+            return self._parse_timestamp(timestamp_value)
+        
+        # 3. 如果都没有，返回None（无限制）
+        return None
+
+    def _parse_timestamp(self, timestamp_value: Union[str, int, float]) -> Optional[datetime]:
+        """
+        解析时间戳值为datetime对象
+
+        支持以下格式:
+        - ISO 8601格式的字符串 (例如 "2025-01-01T00:00:00Z")
+        - Unix时间戳 (整数或浮点数)
+
+        Args:
+            timestamp_value: 时间戳值
+
+        Returns:
+            datetime: 解析后的datetime对象，如果解析失败则返回None
+        """
+        if timestamp_value is None:
+            return None
+        
+        try:
+            if isinstance(timestamp_value, (int, float)):
+                # 处理Unix时间戳
+                return datetime.fromtimestamp(timestamp_value)
+            elif isinstance(timestamp_value, str):
+                # 处理ISO 8601格式字符串
+                return date_parser.parse(timestamp_value)
+            else:
+                self.logger.warning(f"无法解析未知类型的时间戳值: {type(timestamp_value)}")
+                return None
+        except Exception as e:
+            self.logger.error(f"解析时间戳值 '{timestamp_value}' 时出错: {e}")
+            return None
+
+    def set_oldest_sync_timestamp(self, chat_id: Optional[int] = None, timestamp: Optional[Union[str, int, datetime]] = None) -> bool:
+        """
+        设置最旧同步时间戳
+
+        如果指定了chat_id，为特定聊天设置时间戳
+        如果未指定chat_id，则设置全局时间戳
+
+        Args:
+            chat_id: 聊天ID，如果为None则设置全局时间戳
+            timestamp: 时间戳值，可以是ISO 8601字符串、Unix时间戳或datetime对象，None表示删除设置
+
+        Returns:
+            bool: 操作是否成功
+        """
+        # 确保sync_settings存在
+        if not isinstance(self.sync_settings, dict):
+            self.sync_settings = {}
+        
+        # 格式化时间戳
+        formatted_timestamp = None
+        if timestamp is not None:
+            if isinstance(timestamp, datetime):
+                formatted_timestamp = timestamp.isoformat()
+            else:
+                formatted_timestamp = timestamp  # 保持原样
+        
+        try:
+            if chat_id is None:
+                # 设置全局时间戳
+                if formatted_timestamp is None:
+                    # 删除设置
+                    if "global_oldest_sync_timestamp" in self.sync_settings:
+                        del self.sync_settings["global_oldest_sync_timestamp"]
+                        self.logger.info("已删除全局最旧同步时间戳设置")
+                else:
+                    # 更新设置
+                    self.sync_settings["global_oldest_sync_timestamp"] = formatted_timestamp
+                    self.logger.info(f"已设置全局最旧同步时间戳为: {formatted_timestamp}")
+            else:
+                # 设置特定聊天的时间戳
+                chat_id_str = str(chat_id)
+                
+                if formatted_timestamp is None:
+                    # 删除设置
+                    if chat_id_str in self.sync_settings and "oldest_sync_timestamp" in self.sync_settings[chat_id_str]:
+                        del self.sync_settings[chat_id_str]["oldest_sync_timestamp"]
+                        # 如果聊天设置为空，删除整个聊天条目
+                        if not self.sync_settings[chat_id_str]:
+                            del self.sync_settings[chat_id_str]
+                        self.logger.info(f"已删除聊天 {chat_id} 的最旧同步时间戳设置")
+                else:
+                    # 确保聊天条目存在
+                    if chat_id_str not in self.sync_settings:
+                        self.sync_settings[chat_id_str] = {}
+                    
+                    # 更新设置
+                    self.sync_settings[chat_id_str]["oldest_sync_timestamp"] = formatted_timestamp
+                    self.logger.info(f"已设置聊天 {chat_id} 的最旧同步时间戳为: {formatted_timestamp}")
+            
+            # 保存更改
+            self.save_whitelist()
+            return True
+        
+        except Exception as e:
+            self.logger.error(f"设置最旧同步时间戳时出错: {e}")
+            return False
         
     def get_userbot_env(self, key: str, default: Optional[str] = None) -> Optional[str]:
         """

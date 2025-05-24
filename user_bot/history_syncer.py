@@ -141,6 +141,11 @@ class HistorySyncer:
         
         logger.info(f"开始{sync_mode}聊天 {chat_id} 的历史消息")
         
+        # 获取最旧同步时间戳
+        oldest_sync_timestamp = self.config_manager.get_oldest_sync_timestamp(chat_id)
+        if oldest_sync_timestamp:
+            logger.info(f"聊天 {chat_id} 的最旧同步时间戳: {oldest_sync_timestamp}")
+        
         # 获取客户端实例
         client = self.client.get_client()
         
@@ -199,6 +204,11 @@ class HistorySyncer:
                 if date_to and message.date > date_to:
                     continue
                 
+                # 检查是否早于最旧同步时间戳，如果是则停止向前同步
+                if oldest_sync_timestamp and message.date <= oldest_sync_timestamp:
+                    logger.info(f"遇到早于最旧同步时间戳的消息 (消息日期: {message.date}, 最旧时间戳: {oldest_sync_timestamp})，停止同步")
+                    break
+                
                 processed_count += 1
                 
                 # 构建消息文档
@@ -233,6 +243,10 @@ class HistorySyncer:
                     # 因此最后一条消息是最早的，下次应该从比它新的消息开始
                     # 由于索引是以字典形式转换，需要从原始message中获取
                     self._update_last_sync_point(chat_id, message)
+                    
+                    # 如果还有消息但是它们早于最旧同步时间戳，记录这个情况
+                    if oldest_sync_timestamp:
+                        logger.info(f"由于最旧同步时间戳限制 ({oldest_sync_timestamp})，可能有些较早消息未被同步")
             
             logger.info(f"聊天 {chat_id} 同步完成，共处理 {processed_count} 条消息，成功索引 {indexed_count} 条")
             return processed_count, indexed_count

@@ -20,6 +20,7 @@
     *   [已明确] 支持按时间段（如：过去一天、一周、自定义起止日期）进行搜索。
     *   [已明确] 添加 Telegram Mini App (TMA) / 简单网页端作为备用或增强搜索界面。
     *   支持增量更新
+    *   [已明确] 支持设置"最旧同步时间"，限制历史消息同步范围，避免缓存过于久远的消息
 *   **未来功能 (V3+)**
     *   [已明确] MCP（模型上下文协议）集成，可能用于更智能的语义搜索或问答。
     *   支持图片、文件元数据（文件名）搜索（如果 Telethon 和 Meilisearch 支持良好）。
@@ -256,6 +257,7 @@ frontend/
         *   分批处理，避免 API 限制和内存问题。
         *   对每条消息进行处理并调用 `MeilisearchService.index_messages_bulk()`。
         *   记录每个 chat 的最后同步点 (如 last_message_id 或 last_date)。
+        *   检查消息日期是否早于最旧同步时间戳，如果是则停止向前同步，避免缓存过于久远的消息。
     *   `initial_sync_all_whitelisted_chats()`: 遍历白名单，对每个 chat 执行历史同步。
 *   **`utils.py`**:
     *   `generate_message_link(chat_id, message_id)`: 生成 Telegram 消息的永久链接。
@@ -304,6 +306,8 @@ frontend/
     *   `get_whitelist()`: 返回白名单 Chat ID 列表。
     *   `add_to_whitelist(chat_id)`: 添加到白名单并保存配置。
     *   `remove_from_whitelist(chat_id)`: 从白名单移除并保存配置。
+    *   `get_oldest_sync_timestamp(chat_id)`: 获取指定聊天的最旧同步时间戳，优先使用聊天特定设置，其次使用全局设置。
+    *   `set_oldest_sync_timestamp(chat_id, timestamp)`: 设置全局或聊天特定的最旧同步时间戳，支持ISO 8601字符串格式和时间戳格式。
 *   **`models.py`**:
     *   `MeiliMessageDoc(BaseModel)`: Pydantic 模型，定义 Meilisearch 中存储的消息文档结构。
         *   `id: str` (e.g., `chatid_messageid`)

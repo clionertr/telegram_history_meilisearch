@@ -151,6 +151,16 @@ class CommandHandlers:
             events.NewMessage(pattern=r"^/clear_dialogs_cache$")
         )
         
+        # 最旧同步时间设置命令
+        self.client.add_event_handler(
+            self.set_oldest_sync_time_command,
+            events.NewMessage(pattern=r"^/set_oldest_sync_time(?:\s+(-?\d+))?(?:\s+(.+))?$")
+        )
+        self.client.add_event_handler(
+            self.view_oldest_sync_time_command,
+            events.NewMessage(pattern=r"^/view_oldest_sync_time(?:\s+(-?\d+))?$")
+        )
+        
         logger.info("已注册所有命令处理函数，包括普通文本搜索处理器、搜索缓存和对话缓存管理命令")
     
     def _is_plain_text_and_not_command(self, event) -> bool:
@@ -197,6 +207,10 @@ class CommandHandlers:
         # 进一步排除任何以 / 开头的消息，以防有未明确列出的命令
         if text.startswith('/'):
             return False
+            
+        # 新增命令
+        r"^/set_oldest_sync_time(?:\s+(-?\d+))?(?:\s+(.+))?$",
+        r"^/view_oldest_sync_time(?:\s+(-?\d+))?$",
             
         return True # 是普通文本消息，且不是已知命令
 
@@ -1198,6 +1212,178 @@ class CommandHandlers:
         except Exception as e:
             logger.error(f"处理 /clear_dialogs_cache 命令时出错: {e}")
             await event.respond(f"⚠️ 清空对话缓存时出现错误: {str(e)}")
+            
+    async def set_oldest_sync_time_command(self, event) -> None:
+        """
+        处理 /set_oldest_sync_time 命令 (管理员权限)
+        
+        设置全局或特定聊天的最旧同步时间戳
+        格式: /set_oldest_sync_time [chat_id] <timestamp>
+        如果不提供chat_id，则设置全局时间戳
+        
+        Args:
+            event: Telethon 事件对象
+        """
+        try:
+            # 检查权限
+            if not await self.is_admin(event):
+                await event.respond("⚠️ 此命令需要管理员权限。")
+                return
+            
+            # 获取参数
+            message_text = event.message.text
+            match = re.match(r"^/set_oldest_sync_time(?:\s+(-?\d+))?(?:\s+(.+))?$", message_text)
+            
+            # 帮助文本
+            help_text = """**设置最旧同步时间戳**
+            
+用法:
+1. 设置全局最旧同步时间：
+   `/set_oldest_sync_time 2023-01-01T00:00:00Z`
+
+2. 设置特定聊天的最旧同步时间：
+   `/set_oldest_sync_time -1001234567890 2023-01-01T00:00:00Z`
+
+3. 移除设置：
+   `/set_oldest_sync_time remove` (移除全局设置)
+   `/set_oldest_sync_time -1001234567890 remove` (移除特定聊天设置)
+
+时间戳格式可以是：
+- ISO 8601日期时间 (例如: `2023-01-01T00:00:00Z`)
+- Unix时间戳 (例如: `1672531200`)
+
+早于该时间戳的历史消息将不会被同步。"""
+            
+            if not match or (not match.group(1) and not match.group(2)):
+                # 如果没有提供任何参数，显示帮助
+                await event.respond(help_text, parse_mode='md')
+                return
+            
+            chat_id_str = match.group(1)
+            timestamp_str = match.group(2)
+            
+            # 处理场景: /set_oldest_sync_time <timestamp> (全局设置)
+            if chat_id_str and not timestamp_str:
+                # 第一个参数可能是时间戳，而不是chat_id
+                if not chat_id_str.startswith('-') or not chat_id_str[1:].isdigit():
+                    timestamp_str = chat_id_str
+                    chat_id = None
+                else:
+                    # 是chat_id但没有提供时间戳
+                    await event.respond("请提供时间戳，例如: `/set_oldest_sync_time -1001234567890 2023-01-01T00:00:00Z`", parse_mode='md')
+                    return
+            else:
+                # 处理场景: /set_oldest_sync_time <chat_id> <timestamp>
+                chat_id = int(chat_id_str) if chat_id_str else None
+            
+            # 处理时间戳
+            timestamp = None
+            if timestamp_str and timestamp_str.lower() != 'remove':
+                # 尝试解析为ISO 8601格式
+                try:
+                    if timestamp_str.isdigit():
+                        # 是Unix时间戳
+                        timestamp = int(timestamp_str)
+                    else:
+                        # 是ISO 8601格式
+                        timestamp = timestamp_str
+                except ValueError:
+                    await event.respond(f"⚠️ 无效的时间戳格式: `{timestamp_str}`\n\n{help_text}", parse_mode='md')
+                    return
+            
+            # 执行设置
+            success = self.config_manager.set_oldest_sync_timestamp(chat_id, timestamp)
+            
+            if success:
+                if chat_id is None:
+                    if timestamp is None:
+                        message = "✅ 已成功移除全局最旧同步时间戳设置。"
+                    else:
+                        message = f"✅ 已设置全局最旧同步时间戳为: `{timestamp}`"
+                else:
+                    if timestamp is None:
+                        message = f"✅ 已成功移除聊天 `{chat_id}` 的最旧同步时间戳设置。"
+                    else:
+                        message = f"✅ 已设置聊天 `{chat_id}` 的最旧同步时间戳为: `{timestamp}`"
+                
+                await event.respond(message, parse_mode='md')
+                logger.info(f"管理员 {(await event.get_sender()).id} 设置最旧同步时间戳: chat_id={chat_id}, timestamp={timestamp}")
+            else:
+                await event.respond("⚠️ 设置最旧同步时间戳失败，请检查参数格式。", parse_mode='md')
+                
+        except Exception as e:
+            logger.error(f"处理 /set_oldest_sync_time 命令时出错: {e}")
+            await event.respond(f"⚠️ 设置最旧同步时间戳时出现错误: {str(e)}")
+    
+    async def view_oldest_sync_time_command(self, event) -> None:
+        """
+        处理 /view_oldest_sync_time 命令 (管理员权限)
+        
+        查看全局或特定聊天的最旧同步时间戳
+        格式: /view_oldest_sync_time [chat_id]
+        如果不提供chat_id，则显示所有设置
+        
+        Args:
+            event: Telethon 事件对象
+        """
+        try:
+            # 检查权限
+            if not await self.is_admin(event):
+                await event.respond("⚠️ 此命令需要管理员权限。")
+                return
+            
+            # 获取参数
+            message_text = event.message.text
+            match = re.match(r"^/view_oldest_sync_time(?:\s+(-?\d+))?$", message_text)
+            
+            chat_id_str = match.group(1) if match else None
+            
+            if chat_id_str:
+                # 查看特定聊天的设置
+                chat_id = int(chat_id_str)
+                timestamp = self.config_manager.get_oldest_sync_timestamp(chat_id)
+                
+                response = f"🕒 **聊天 `{chat_id}` 的最旧同步时间设置**\n\n"
+                if timestamp:
+                    response += f"最旧同步时间戳: `{timestamp.isoformat()}`\n"
+                    response += f"Unix时间戳: `{int(timestamp.timestamp())}`\n\n"
+                    response += "早于此时间的消息将不会被同步。"
+                else:
+                    response += "此聊天没有特定的最旧同步时间设置，将使用全局设置（如果有）。"
+            else:
+                # 查看所有设置
+                sync_settings = getattr(self.config_manager, 'sync_settings', {}) or {}
+                
+                response = "🕒 **最旧同步时间设置**\n\n"
+                
+                # 显示全局设置
+                if "global_oldest_sync_timestamp" in sync_settings:
+                    global_timestamp = sync_settings["global_oldest_sync_timestamp"]
+                    response += f"**全局设置**: `{global_timestamp}`\n\n"
+                else:
+                    response += "**全局设置**: 未设置\n\n"
+                
+                # 显示特定聊天设置
+                chat_settings = [k for k in sync_settings.keys() if k != "global_oldest_sync_timestamp"]
+                if chat_settings:
+                    response += "**聊天特定设置**:\n"
+                    for chat_id_key in chat_settings:
+                        try:
+                            chat_id = int(chat_id_key)
+                            if isinstance(sync_settings[chat_id_key], dict) and "oldest_sync_timestamp" in sync_settings[chat_id_key]:
+                                chat_timestamp = sync_settings[chat_id_key]["oldest_sync_timestamp"]
+                                response += f"- 聊天 `{chat_id}`: `{chat_timestamp}`\n"
+                        except (ValueError, TypeError):
+                            continue
+                else:
+                    response += "**聊天特定设置**: 无\n"
+            
+            await event.respond(response, parse_mode='md')
+            logger.info(f"管理员 {(await event.get_sender()).id} 查看最旧同步时间设置")
+            
+        except Exception as e:
+            logger.error(f"处理 /view_oldest_sync_time 命令时出错: {e}", exc_info=True)
+            await event.respond(f"⚠️ 查看最旧同步时间设置时出现错误: {str(e)}")
 
 # 辅助函数：创建命令处理器并注册到客户端
 def setup_command_handlers(

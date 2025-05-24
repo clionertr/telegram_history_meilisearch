@@ -238,6 +238,19 @@ def format_help_message() -> str:
 - `/add_whitelist <chat_id>`: 将指定的 chat_id 添加到 User Bot 的消息同步白名单。
 - `/remove_whitelist <chat_id>`: 从白名单中移除指定的 chat_id。
 
+**最旧同步时间管理:**
+- `/set_oldest_sync_time [chat_id] <timestamp>`: 设置最旧同步时间戳，限制历史同步范围。
+  例如:
+  - 设置全局时间戳: `/set_oldest_sync_time 2023-01-01T00:00:00Z`
+  - 设置特定聊天时间戳: `/set_oldest_sync_time -1001234567890 2023-01-01T00:00:00Z`
+  - 移除设置: `/set_oldest_sync_time remove` 或 `/set_oldest_sync_time -1001234567890 remove`
+- `/view_oldest_sync_time [chat_id]`: 查看当前的最旧同步时间设置。
+  例如:
+  - 查看所有设置: `/view_oldest_sync_time`
+  - 查看特定聊天设置: `/view_oldest_sync_time -1001234567890`
+
+*注意: 最旧同步时间设置可限制历史同步的范围，早于该时间戳的消息将不会被同步到搜索系统中，有助于减少存储开销。*
+
 **缓存管理:**
 - `/view_search_config`: 查看搜索缓存配置和状态。
 - `/set_search_config <配置项> <值>`: 设置搜索缓存配置。

@@ -1,4 +1,12 @@
 {
-    "whitelist": [-1001926579047],
-    "updated_at": null
+    "whitelist": [
+        -1001926579047,
+        -1001926579047
+    ],
+    "updated_at": 1748081247.0540411,
+    "sync_settings": {
+        "-1001964532874": {
+            "oldest_sync_timestamp": "2024-01-01T00:00:00Z"
+        }
+    }
 }

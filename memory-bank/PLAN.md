@@ -50,6 +50,7 @@
         *   实现加载 `.env` 和 `config.ini` (如果选择使用) 的功能。
         *   提供获取配置项的方法。
         *   实现白名单的读取、添加、移除逻辑 (初期可基于 JSON 文件或 Python 列表存储在配置文件中)。
+        *   实现最旧同步时间（`oldest_sync_timestamp`）的读取和管理逻辑。该配置可以全局生效，或针对特定 chat_id 生效，存储于 `whitelist.json`。
         *   编写单元测试。
         *   记录到 `memory-bank/activeContext.md`。
 2.  **任务：** `core/models.py` 开发。
@@ -77,8 +78,8 @@
         *   记录到 `memory-bank/activeContext.md`。
 6.  **任务：** `user_bot/history_syncer.py` 开发。
     *   **AI 行动：**
-        *   实现 `sync_chat_history()`。
-        *   实现 `initial_sync_all_whitelisted_chats()`。
+        *   实现 `sync_chat_history()`。在同步时，从 `ConfigManager` 获取对应聊天的最旧同步时间，如果消息的 `date` 早于此时间戳，则停止同步该聊天更早的消息。
+        *   实现 `initial_sync_all_whitelisted_chats()`。同样应用最旧同步时间的检查逻辑。
         *   记录到 `memory-bank/activeContext.md`。
 7.  **任务：** `user_bot/utils.py` 开发。
     *   **AI 行动：**
