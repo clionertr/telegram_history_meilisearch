@@ -182,3 +182,13 @@
 
 **关联 `activeContext.md` 记录:**
 详细的分析、代码修改方案和验证过程记录在 [`memory-bank/activeContext.md`](memory-bank/activeContext.md) 中（由 💻 Code 模式在 2025-05-24 记录的部分，标题为 "2025-05-24: 修复 `history_syncer.py` 中的 `client.get_entity` 警告问题"）。
+---
+## 2025/5/24 (续)
+
+*   **决策:** 修复 `/restart_userbot` 命令，确保其在重启 User Bot 后能重新加载所有配置文件。
+    *   **理由:** 用户报告在通过 `/restart_userbot` 重启 User Bot 后，对 `whitelist.json`, `sync_points.json`, `config.ini` 等文件的修改未生效。原 `reload_config()` 方法仅重新加载了 `.env.userbot`。
+    *   **影响与技术细节:**
+        *   修改了 [`user_bot/client.py`](user_bot/client.py) 中的 `reload_config()` 方法。
+        *   在该方法中，确保调用了 `self.config_manager.load_env()`, `self.config_manager.load_userbot_env()`, `self.config_manager.load_config()`, `self.config_manager.load_whitelist()` 和 `self.config_manager._load_search_bot_config()`。
+        *   这样可以保证所有由 `ConfigManager` 管理的配置在 User Bot 重启时都能从文件系统中刷新。
+    *   **状态:** 已实施。

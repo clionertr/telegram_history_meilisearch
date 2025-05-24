@@ -337,13 +337,17 @@ class UserBotClient:
         """
         重新加载配置
         
-        在配置更改后调用，重新加载User Bot的配置
+        在配置更改后调用，重新加载User Bot的配置和所有相关配置文件
         注意：此方法不会重新创建客户端实例，需要先断开连接再重新启动
         """
-        logger.info("正在重新加载User Bot配置...")
+        logger.info("正在重新加载User Bot配置和所有相关配置文件...")
         
-        # 重新加载User Bot环境变量
-        self.config_manager.load_userbot_env()
+        # 重新加载所有配置文件
+        self.config_manager.load_env()  # 重新加载主环境变量
+        self.config_manager.load_userbot_env()  # 重新加载User Bot环境变量
+        self.config_manager.load_config()  # 重新加载config.ini
+        self.config_manager.load_whitelist()  # 重新加载whitelist.json和同步设置
+        self.config_manager._load_search_bot_config()  # 重新加载SearchBot特定配置
         
         # 更新会话名称（如果已更改）
         user_session_name = self.config_manager.get_userbot_env("USER_SESSION_NAME")
@@ -351,4 +355,4 @@ class UserBotClient:
             logger.info(f"会话名称已更改: {self.session_name} -> {user_session_name}")
             self.session_name = user_session_name
             
-        logger.info("User Bot配置已重新加载")
+        logger.info("User Bot配置和所有相关配置文件已重新加载")
