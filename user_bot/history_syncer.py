@@ -25,7 +25,7 @@ logger = logging.getLogger(__name__)
 
 # 常量定义
 BATCH_SIZE = 100  # 每批处理的消息数量
-RATE_LIMIT_WAIT = 2  # 消息间隔，避免触发Telegram的速率限制（秒）
+RATE_LIMIT_WAIT = 0  # 消息间隔，避免触发Telegram的速率限制（秒）
 MAX_ATTEMPTS = 3  # 最大重试次数
 
 
@@ -371,31 +371,60 @@ class HistorySyncer:
             
             # 获取发送者信息
             sender_id = 0
-            sender_name = None
+            sender_name = "未知发送者"  # 默认值
             
-            if message.sender_id:
+            # 1. 尝试多种方式获取sender_id
+            # 首先尝试message.sender_id
+            if getattr(message, 'sender_id', None) is not None:
                 sender_id = message.sender_id
+            # 如果sender_id还是0，尝试从from_id获取
+            elif hasattr(message, 'from_id') and message.from_id is not None:
+                # from_id可能是PeerUser、PeerChat或PeerChannel对象
+                if hasattr(message.from_id, 'user_id'):
+                    sender_id = message.from_id.user_id
+                elif hasattr(message.from_id, 'chat_id'):
+                    sender_id = message.from_id.chat_id
+                elif hasattr(message.from_id, 'channel_id'):
+                    sender_id = message.from_id.channel_id
+            # 如果sender_id还是0，尝试从sender对象获取
+            elif hasattr(message, 'sender') and message.sender is not None:
+                if hasattr(message.sender, 'id'):
+                    sender_id = message.sender.id
+            
+            # 2. 尝试获取sender_name
+            try:
+                if hasattr(message, 'sender') and message.sender is not None:
+                    sender = message.sender
+                    # 根据不同类型的sender获取名称
+                    if hasattr(sender, 'first_name') or hasattr(sender, 'last_name'):
+                        # 用户类型
+                        sender_name = format_sender_name(
+                            getattr(sender, 'first_name', None),
+                            getattr(sender, 'last_name', None)
+                        )
+                    elif hasattr(sender, 'title'):
+                        # 群组或频道类型
+                        sender_name = getattr(sender, 'title', "未知发送者")
+                    
+                    # 如果sender_name为空或None，使用username作为备选
+                    if not sender_name or sender_name == "未知发送者":
+                        if hasattr(sender, 'username') and sender.username:
+                            sender_name = f"@{sender.username}"
                 
-                try:
-                    # 尝试直接从message.sender获取发送者详细信息
-                    if hasattr(message, 'sender') and message.sender:
-                        sender = message.sender
-                        if hasattr(sender, 'first_name'):
-                            sender_name = format_sender_name(
-                                getattr(sender, 'first_name', None),
-                                getattr(sender, 'last_name', None)
-                            )
-                        elif hasattr(sender, 'title'):
-                            sender_name = sender.title
-                    else:
-                        # 如果message.sender不存在或为None，记录日志
-                        logger.warning(f"无法从message对象获取发送者信息。sender_id: {sender_id}, "
-                                       f"message.sender: {getattr(message, 'sender', None)}, "
-                                       f"message.from_id: {getattr(message, 'from_id', None)}")
-                        sender_name = "未知发送者"  # 使用默认值
-                except Exception as e:
-                    logger.warning(f"从message对象获取发送者 {sender_id} 信息失败: {str(e)}")
-                    sender_name = "未知发送者"  # 使用默认值
+                # 记录debug日志，帮助诊断信息获取情况
+                if sender_id != 0 and sender_name != "未知发送者":
+                    logger.debug(f"成功获取发送者信息: sender_id={sender_id}, sender_name={sender_name}")
+                else:
+                    # 记录详细的警告日志，帮助诊断问题
+                    sender_info = {
+                        "sender_id": getattr(message, 'sender_id', None),
+                        "from_id": getattr(message, 'from_id', None),
+                        "sender": getattr(message, 'sender', None)
+                    }
+                    logger.warning(f"无法完全获取发送者信息，使用部分信息。sender_id={sender_id}, "
+                                  f"sender_name={sender_name}, message属性={sender_info}")
+            except Exception as e:
+                logger.warning(f"解析发送者信息时发生异常: {str(e)}")
             
             # 生成唯一ID和消息链接
             message_id = message.id

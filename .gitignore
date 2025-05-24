@@ -163,3 +163,4 @@ Thumbs.db
 .sessions/
 *.session
 sync_points.json
+whitelist.json
