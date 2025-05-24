@@ -238,6 +238,13 @@ def format_help_message() -> str:
 - `/add_whitelist <chat_id>`: 将指定的 chat_id 添加到 User Bot 的消息同步白名单。
 - `/remove_whitelist <chat_id>`: 从白名单中移除指定的 chat_id。
 
+**缓存管理:**
+- `/view_search_config`: 查看搜索缓存配置和状态。
+- `/set_search_config <配置项> <值>`: 设置搜索缓存配置。
+- `/clear_search_cache`: 清空搜索缓存。
+- `/view_dialogs_cache`: 查看对话缓存状态。
+- `/clear_dialogs_cache`: 清空对话缓存。
+
 ---
 
 **配置文件说明:**

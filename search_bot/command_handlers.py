@@ -20,6 +20,7 @@ from telethon.tl.types import User
 from core.meilisearch_service import MeiliSearchService
 from core.config_manager import ConfigManager
 from .cache_service import SearchCacheService # Added
+from .dialogs_cache_service import DialogsCacheService # Added for dialogs caching
 from search_bot.message_formatters import format_search_results, format_error_message, format_help_message, format_dialogs_list
 from user_bot.client import UserBotClient
 
@@ -58,12 +59,13 @@ class CommandHandlers:
         self.admin_ids = admin_ids
         self.userbot_restart_event = userbot_restart_event
         self.cache_service = SearchCacheService(config_manager)
+        self.dialogs_cache_service = DialogsCacheService(config_manager) # Added for dialogs caching
         self.active_full_fetches: Dict[str, asyncio.Task] = {} # For managing async full-fetch tasks
         
         # 注册命令处理函数
         self.register_handlers()
         
-        logger.info("命令处理器已初始化，搜索缓存服务已配置")
+        logger.info("命令处理器已初始化，搜索缓存和对话缓存服务已配置")
     
     def register_handlers(self) -> None:
         """
@@ -139,7 +141,17 @@ class CommandHandlers:
             events.NewMessage(pattern=r"^/clear_search_cache$")
         )
         
-        logger.info("已注册所有命令处理函数，包括普通文本搜索处理器和搜索缓存管理命令")
+        # Dialogs Cache Admin Commands
+        self.client.add_event_handler(
+            self.view_dialogs_cache_command,
+            events.NewMessage(pattern=r"^/view_dialogs_cache$")
+        )
+        self.client.add_event_handler(
+            self.clear_dialogs_cache_command,
+            events.NewMessage(pattern=r"^/clear_dialogs_cache$")
+        )
+        
+        logger.info("已注册所有命令处理函数，包括普通文本搜索处理器、搜索缓存和对话缓存管理命令")
     
     def _is_plain_text_and_not_command(self, event) -> bool:
         """
@@ -173,7 +185,9 @@ class CommandHandlers:
             # Add new search config commands to prevent them being treated as plain text
             r"^/view_search_config$",
             r"^/set_search_config(?:\s+(\S+))?(?:\s+(.+))?$",
-            r"^/clear_search_cache$"
+            r"^/clear_search_cache$",
+            r"^/view_dialogs_cache$",
+            r"^/clear_dialogs_cache$"
         ]
         
         for pattern in known_commands_patterns:
@@ -827,6 +841,7 @@ class CommandHandlers:
         处理 /get_dialogs 命令
         
         获取用户账户下的所有对话列表，包括对话名称和ID
+        支持30分钟缓存以提高响应速度
         
         Args:
             event: Telethon 事件对象
@@ -836,58 +851,79 @@ class CommandHandlers:
             sender_id = sender.id
             logger.info(f"用户 {sender_id} 请求获取对话列表")
             
-            # 发送处理中的消息
-            status_message = await event.respond("🔍 正在获取对话列表，请稍候...")
+            # 首先检查缓存
+            cached_dialogs = None
+            if self.dialogs_cache_service.is_cache_enabled():
+                cached_dialogs = self.dialogs_cache_service.get_from_cache(sender_id)
             
+            if cached_dialogs:
+                # 缓存命中，直接使用缓存数据
+                logger.info(f"用户 {sender_id} 的对话列表缓存命中，共 {len(cached_dialogs)} 个对话")
+                all_dialogs_info = cached_dialogs
+                
+                # 发送缓存提示消息（可选）
+                status_message = await event.respond("📋 正在加载对话列表（来自缓存）...")
+            else:
+                # 缓存未命中，需要从API获取
+                logger.info(f"用户 {sender_id} 的对话列表缓存未命中，从API获取")
+                
+                # 发送处理中的消息
+                status_message = await event.respond("🔍 正在获取对话列表，请稍候...")
+                
+                # 获取 UserBotClient 实例
+                try:
+                    userbot_client = UserBotClient()
+                    
+                    # 调用获取对话信息的方法
+                    all_dialogs_info = await userbot_client.get_dialogs_info()
+                    
+                    # 将结果存入缓存
+                    if self.dialogs_cache_service.is_cache_enabled() and all_dialogs_info:
+                        self.dialogs_cache_service.store_in_cache(sender_id, all_dialogs_info)
+                        logger.info(f"用户 {sender_id} 的对话列表已存入缓存，30分钟内有效")
+                    
+                except RuntimeError as e:
+                    # UserBot 客户端相关错误
+                    error_msg = "⚠️ User Bot 未正确初始化或未连接，无法获取对话列表。\n\n请联系管理员检查 User Bot 状态。"
+                    await status_message.edit(error_msg, parse_mode='md')
+                    logger.error(f"UserBot 客户端错误: {e}")
+                    return
+                    
+                except Exception as e:
+                    # 其他错误
+                    error_msg = f"⚠️ 获取对话列表时发生错误: {str(e)}\n\n请稍后再试或联系管理员。"
+                    await status_message.edit(error_msg, parse_mode='md')
+                    logger.error(f"获取对话列表时发生未知错误: {e}", exc_info=True)
+                    return
+            
+            # 检查对话列表是否为空
+            if not all_dialogs_info:
+                await status_message.edit("📭 **对话列表为空**\n\n当前账户下没有找到任何对话。", parse_mode='md')
+                logger.info(f"用户 {sender_id} 的对话列表为空")
+                return
+
+            # 分页设置
             dialogs_per_page = 15  # 每页显示的对话数量，可以根据需要调整
             current_page = 1 # 初始请求总是第一页
+            total_dialogs = len(all_dialogs_info)
+            total_pages = (total_dialogs + dialogs_per_page - 1) // dialogs_per_page
+            if total_pages == 0: # Handle case with 0 dialogs, though caught by `if not all_dialogs_info`
+                total_pages = 1
 
-            # 获取 UserBotClient 实例
-            try:
-                userbot_client = UserBotClient()
-                
-                # 调用获取对话信息的方法
-                # 注意：这里获取的是完整的对话列表
-                all_dialogs_info = await userbot_client.get_dialogs_info()
-                
-                if not all_dialogs_info:
-                    await status_message.edit("📭 **对话列表为空**\n\n当前账户下没有找到任何对话。", parse_mode='md')
-                    logger.info(f"用户 {sender_id} 的对话列表为空")
-                    return
-
-                total_dialogs = len(all_dialogs_info)
-                total_pages = (total_dialogs + dialogs_per_page - 1) // dialogs_per_page
-                if total_pages == 0: # Handle case with 0 dialogs, though caught by `if not all_dialogs_info`
-                    total_pages = 1
-
-                # 格式化对话列表（第一页）
-                formatted_message, buttons = format_dialogs_list(
-                    dialogs_info=all_dialogs_info,
-                    current_page=current_page,
-                    total_pages=total_pages,
-                    items_per_page=dialogs_per_page
-                )
-                
-                # 更新消息
-                await status_message.edit(formatted_message, buttons=buttons, parse_mode='md')
-                
-                # 记录日志
-                logger.info(f"已向用户 {sender_id} 发送对话列表第 {current_page}/{total_pages} 页，共 {total_dialogs} 个对话")
-                
-                # 在日志中打印对话信息（用于调试，可以考虑只打印部分或摘要）
-                # logger.debug(f"完整对话列表详情: {all_dialogs_info}")
-                
-            except RuntimeError as e:
-                # UserBot 客户端相关错误
-                error_msg = "⚠️ User Bot 未正确初始化或未连接，无法获取对话列表。\n\n请联系管理员检查 User Bot 状态。"
-                await status_message.edit(error_msg, parse_mode='md')
-                logger.error(f"UserBot 客户端错误: {e}")
-                
-            except Exception as e:
-                # 其他错误
-                error_msg = f"⚠️ 获取对话列表时发生错误: {str(e)}\n\n请稍后再试或联系管理员。"
-                await status_message.edit(error_msg, parse_mode='md')
-                logger.error(f"获取对话列表时发生未知错误: {e}", exc_info=True)
+            # 格式化对话列表（第一页）
+            formatted_message, buttons = format_dialogs_list(
+                dialogs_info=all_dialogs_info,
+                current_page=current_page,
+                total_pages=total_pages,
+                items_per_page=dialogs_per_page
+            )
+            
+            # 更新消息
+            await status_message.edit(formatted_message, buttons=buttons, parse_mode='md')
+            
+            # 记录日志
+            cache_status = "（来自缓存）" if cached_dialogs else "（从API获取）"
+            logger.info(f"已向用户 {sender_id} 发送对话列表第 {current_page}/{total_pages} 页，共 {total_dialogs} 个对话 {cache_status}")
                 
         except Exception as e:
             logger.error(f"处理 /get_dialogs 命令时出错: {e}", exc_info=True)
@@ -1021,6 +1057,56 @@ class CommandHandlers:
         except Exception as e:
             logger.error(f"处理 /clear_search_cache 命令时出错: {e}")
             await event.respond(f"⚠️ 清空搜索缓存时出现错误: {str(e)}")
+
+    async def view_dialogs_cache_command(self, event) -> None:
+        """处理 /view_dialogs_cache 命令 (管理员权限)"""
+        if not await self.is_admin(event):
+            await event.respond("⚠️ 此命令需要管理员权限。")
+            return
+        try:
+            config_text = "💬 **对话缓存状态**\n\n"
+            
+            cache_stats = self.dialogs_cache_service.get_cache_stats()
+            if cache_stats.get("enabled"):
+                config_text += f"- 启用状态: `已启用`\n"
+                config_text += f"- 缓存TTL: `{cache_stats.get('ttl', 'N/A')}秒` (30分钟)\n"
+                config_text += f"- 当前条目数: `{cache_stats.get('currsize', 'N/A')}`\n"
+                config_text += f"- 最大条目数: `{cache_stats.get('maxsize', 'N/A')}`\n\n"
+                config_text += "**说明:**\n"
+                config_text += "- 每个用户的对话列表单独缓存\n"
+                config_text += "- 缓存有效期为30分钟\n"
+                config_text += "- 缓存可减少对Telegram API的调用频率"
+            else:
+                config_text += "**状态:** `已禁用`\n\n"
+                config_text += "对话缓存当前已禁用，每次请求都会直接调用Telegram API。"
+            
+            await event.respond(config_text, parse_mode='md')
+            logger.info(f"管理员 {(await event.get_sender()).id} 查看对话缓存状态")
+        except Exception as e:
+            logger.error(f"处理 /view_dialogs_cache 命令时出错: {e}")
+            await event.respond(f"⚠️ 查看对话缓存状态时出现错误: {str(e)}")
+
+    async def clear_dialogs_cache_command(self, event) -> None:
+        """处理 /clear_dialogs_cache 命令 (管理员权限)"""
+        if not await self.is_admin(event):
+            await event.respond("⚠️ 此命令需要管理员权限。")
+            return
+        try:
+            if not self.dialogs_cache_service.is_cache_enabled():
+                await event.respond("ℹ️ 对话缓存当前已禁用，无需清空。")
+                return
+            
+            # 获取清空前的统计信息
+            stats_before = self.dialogs_cache_service.get_cache_stats()
+            cleared_count = stats_before.get('currsize', 0)
+            
+            self.dialogs_cache_service.clear_cache()
+            
+            await event.respond(f"✅ 对话缓存已清空。\n\n已清除 `{cleared_count}` 个缓存条目。", parse_mode='md')
+            logger.info(f"管理员 {(await event.get_sender()).id} 清空了对话缓存，清除了 {cleared_count} 个条目")
+        except Exception as e:
+            logger.error(f"处理 /clear_dialogs_cache 命令时出错: {e}")
+            await event.respond(f"⚠️ 清空对话缓存时出现错误: {str(e)}")
 
 # 辅助函数：创建命令处理器并注册到客户端
 def setup_command_handlers(

@@ -42,7 +42,8 @@ class CallbackQueryHandlers:
         """
         self.client = client
         self.command_handler = command_handler # Store CommandHandlers instance
-        self.cache_service = command_handler.cache_service # Convenience access
+        self.cache_service = command_handler.cache_service # Convenience access for search cache
+        self.dialogs_cache_service = command_handler.dialogs_cache_service # Convenience access for dialogs cache
         
         # 注册回调处理函数
         self.register_handlers()
@@ -211,15 +212,44 @@ class CallbackQueryHandlers:
             
             await event.answer("正在加载对话列表页面...") # Toast notification
 
-            # Re-fetch dialogs (or use a cached version if implemented later)
-            # For now, always re-fetch the full list.
-            from user_bot.client import UserBotClient # Local import to avoid potential init issues if module is complex
+            # 导入必要的模块
+            from user_bot.client import UserBotClient # Local import
             from search_bot.message_formatters import format_dialogs_list # Ensure it's available
 
-            userbot_client = UserBotClient() # Get singleton instance
-            all_dialogs_info = await userbot_client.get_dialogs_info()
+            all_dialogs_info = None
+            cache_hit = False
+
+            # 尝试从缓存获取对话列表
+            if self.dialogs_cache_service.is_cache_enabled():
+                all_dialogs_info = self.dialogs_cache_service.get_from_cache(user_id)
+                if all_dialogs_info:
+                    cache_hit = True
+                    logger.info(f"对话列表分页: 用户 {user_id} 缓存命中，共 {len(all_dialogs_info)} 个对话")
 
             if not all_dialogs_info:
+                # 缓存未命中或缓存禁用，从API获取
+                logger.info(f"对话列表分页: 用户 {user_id} 缓存未命中或禁用，从API获取")
+
+                try:
+                    userbot_client = UserBotClient() # Get singleton instance
+                    all_dialogs_info = await userbot_client.get_dialogs_info()
+
+                    # 如果获取成功且缓存启用，则存入缓存
+                    if all_dialogs_info and self.dialogs_cache_service.is_cache_enabled():
+                        self.dialogs_cache_service.store_in_cache(user_id, all_dialogs_info)
+                        logger.info(f"对话列表分页: 用户 {user_id} 的对话列表已存入缓存")
+                except RuntimeError as e:
+                    error_msg = "⚠️ User Bot 未正确初始化或未连接，无法获取对话列表分页数据。"
+                    await event.edit(error_msg, parse_mode='md')
+                    logger.error(f"对话列表分页: UserBot 客户端错误: {e}")
+                    return
+                except Exception as e:
+                    error_msg = f"⚠️ 获取对话列表分页数据时发生错误: {str(e)}"
+                    await event.edit(error_msg, parse_mode='md')
+                    logger.error(f"对话列表分页: 获取对话列表时发生未知错误: {e}", exc_info=True)
+                    return
+            
+            if not all_dialogs_info: # 再次检查，以防API调用也返回空
                 await event.edit("📭 **对话列表为空**\n\n当前账户下没有找到任何对话。", parse_mode='md')
                 logger.info(f"用户 {user_id} 的对话列表在分页时变为空")
                 return
