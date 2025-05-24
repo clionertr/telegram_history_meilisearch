@@ -13,20 +13,58 @@ function FilterControls() {
   // 使用TMA SDK钩子
   const { isAvailable, themeParams } = useTelegramSDK();
 
+  // 计算默认日期
+  const getDefaultDates = () => {
+    // 结束日期默认为明天
+    const tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    const defaultDateTo = tomorrow.toISOString().split('T')[0];
+    
+    // 开始日期默认为三个月前
+    const threeMonthsAgo = new Date();
+    threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
+    const defaultDateFrom = threeMonthsAgo.toISOString().split('T')[0];
+    
+    return { defaultDateFrom, defaultDateTo };
+  };
+  
+  const { defaultDateFrom, defaultDateTo } = getDefaultDates();
+
   // 本地状态，用于控制UI
   const [isExpanded, setIsExpanded] = useState(false);
   const [localFilters, setLocalFilters] = useState({
     chat_type: filters.chat_type || [],
-    date_from: filters.date_from ? new Date(filters.date_from * 1000).toISOString().split('T')[0] : '',
-    date_to: filters.date_to ? new Date(filters.date_to * 1000).toISOString().split('T')[0] : ''
+    date_from: filters.date_from
+      ? new Date(filters.date_from * 1000).toISOString().split('T')[0]
+      : defaultDateFrom,
+    date_to: filters.date_to
+      ? new Date(filters.date_to * 1000).toISOString().split('T')[0]
+      : defaultDateTo
   });
+
+  // 当store中的filters改变时，更新本地状态
+  // 初始化时应用默认筛选条件（如果没有已有筛选）
+  useEffect(() => {
+    if (!filters.date_from && !filters.date_to && (!filters.chat_type || filters.chat_type.length === 0)) {
+      // 将日期字符串转换为Unix时间戳（秒级）
+      const dateFromTimestamp = Math.floor(new Date(defaultDateFrom).getTime() / 1000);
+      const dateToTimestamp = Math.floor(new Date(defaultDateTo + 'T23:59:59').getTime() / 1000);
+      
+      // 更新store中的filters（但不自动搜索，等用户主动搜索）
+      setFilters({
+        chat_type: [],
+        date_from: dateFromTimestamp,
+        date_to: dateToTimestamp
+      });
+    }
+  }, []);  // 仅在组件挂载时运行一次
 
   // 当store中的filters改变时，更新本地状态
   useEffect(() => {
     setLocalFilters({
       chat_type: filters.chat_type || [],
-      date_from: filters.date_from ? new Date(filters.date_from * 1000).toISOString().split('T')[0] : '',
-      date_to: filters.date_to ? new Date(filters.date_to * 1000).toISOString().split('T')[0] : ''
+      date_from: filters.date_from ? new Date(filters.date_from * 1000).toISOString().split('T')[0] : defaultDateFrom,
+      date_to: filters.date_to ? new Date(filters.date_to * 1000).toISOString().split('T')[0] : defaultDateTo
     });
   }, [filters]);
 
@@ -40,10 +78,15 @@ function FilterControls() {
       ? [...localFilters.chat_type, type]
       : localFilters.chat_type.filter(t => t !== type);
     
-    setLocalFilters({
+    const updatedFilters = {
       ...localFilters,
       chat_type: updatedChatTypes
-    });
+    };
+    
+    setLocalFilters(updatedFilters);
+    
+    // 自动应用筛选
+    applyFiltersWithValues(updatedFilters);
   };
 
   /**
@@ -52,28 +95,33 @@ function FilterControls() {
    * @param {string} value - 日期字符串 (YYYY-MM-DD)
    */
   const handleDateChange = (field, value) => {
-    setLocalFilters({
+    const updatedFilters = {
       ...localFilters,
       [field]: value
-    });
+    };
+    
+    setLocalFilters(updatedFilters);
+    
+    // 自动应用筛选
+    applyFiltersWithValues(updatedFilters);
   };
 
   /**
-   * 应用筛选条件
+   * 使用给定的筛选值应用筛选条件
    */
-  const applyFilters = () => {
+  const applyFiltersWithValues = (filterValues) => {
     // 将日期字符串转换为Unix时间戳（秒级）
-    const dateFromTimestamp = localFilters.date_from
-      ? Math.floor(new Date(localFilters.date_from).getTime() / 1000)
+    const dateFromTimestamp = filterValues.date_from
+      ? Math.floor(new Date(filterValues.date_from).getTime() / 1000)
       : null;
     
-    const dateToTimestamp = localFilters.date_to
-      ? Math.floor(new Date(localFilters.date_to + 'T23:59:59').getTime() / 1000) // 设置为当天最后一秒
+    const dateToTimestamp = filterValues.date_to
+      ? Math.floor(new Date(filterValues.date_to + 'T23:59:59').getTime() / 1000) // 设置为当天最后一秒
       : null;
     
     // 准备筛选条件对象
     const newFilters = {
-      chat_type: localFilters.chat_type.length > 0 ? localFilters.chat_type : [],
+      chat_type: filterValues.chat_type.length > 0 ? filterValues.chat_type : [],
       date_from: dateFromTimestamp,
       date_to: dateToTimestamp
     };
@@ -81,6 +129,13 @@ function FilterControls() {
     // 更新store中的filters并触发搜索
     setFilters(newFilters);
     fetchResults(undefined, 1); // 重置到第一页，使用当前的查询词
+  };
+  
+  /**
+   * 应用当前本地筛选条件
+   */
+  const applyFilters = () => {
+    applyFiltersWithValues(localFilters);
   };
 
   /**
@@ -224,14 +279,6 @@ function FilterControls() {
           {/* 筛选按钮 */}
           <div className="flex flex-wrap gap-2">
             <button
-              onClick={applyFilters}
-              className="px-4 py-2 rounded-lg focus:outline-none disabled:opacity-50"
-              style={buttonStyle}
-              disabled={isLoading}
-            >
-              {isLoading ? '处理中...' : '应用筛选'}
-            </button>
-            <button
               onClick={clearFilters}
               className="px-4 py-2 border rounded-lg focus:outline-none disabled:opacity-50"
               style={secondaryButtonStyle}
@@ -243,7 +290,7 @@ function FilterControls() {
           
           {/* 提示文本 */}
           <div className="mt-2 text-xs" style={hintTextStyle}>
-            提示: 不选择任何筛选条件将搜索所有类型和时间段
+            提示: 筛选条件会自动应用，不选择任何筛选条件将搜索所有类型和时间段
           </div>
         </div>
       )}

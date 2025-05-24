@@ -185,3 +185,141 @@ const highlightStyles = `
 - 带有背景色
 - 轻微的内边距和圆角
 - 与Telegram主题颜色相协调
+## 7. 添加额外功能
+
+根据用户反馈，需要添加两个额外功能：
+1. 为日期筛选设置默认值
+2. 实现筛选条件的自动应用
+
+### 7.1 默认日期范围设置
+
+添加了默认日期范围计算逻辑，设置初始筛选条件：
+- 结束日期默认设置为明天
+- 开始日期默认设置为当前日期往前推三个月
+
+实现代码：
+```javascript
+// 计算默认日期
+const getDefaultDates = () => {
+  // 结束日期默认为明天
+  const tomorrow = new Date();
+  tomorrow.setDate(tomorrow.getDate() + 1);
+  const defaultDateTo = tomorrow.toISOString().split('T')[0];
+  
+  // 开始日期默认为三个月前
+  const threeMonthsAgo = new Date();
+  threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
+  const defaultDateFrom = threeMonthsAgo.toISOString().split('T')[0];
+  
+  return { defaultDateFrom, defaultDateTo };
+};
+```
+
+在组件挂载时应用这些默认值：
+```javascript
+useEffect(() => {
+  if (!filters.date_from && !filters.date_to && (!filters.chat_type || filters.chat_type.length === 0)) {
+    // 将日期字符串转换为Unix时间戳（秒级）
+    const dateFromTimestamp = Math.floor(new Date(defaultDateFrom).getTime() / 1000);
+    const dateToTimestamp = Math.floor(new Date(defaultDateTo + 'T23:59:59').getTime() / 1000);
+    
+    // 更新store中的filters
+    setFilters({
+      chat_type: [],
+      date_from: dateFromTimestamp,
+      date_to: dateToTimestamp
+    });
+  }
+}, []);  // 仅在组件挂载时运行一次
+```
+
+### 7.2 自动应用筛选
+
+修改了筛选条件的处理逻辑，使其在用户更改任何筛选选项时自动应用，而不需要点击"应用筛选"按钮：
+
+1. 提取了应用筛选的核心逻辑到一个可复用函数：
+```javascript
+const applyFiltersWithValues = (filterValues) => {
+  // 将日期字符串转换为Unix时间戳（秒级）
+  const dateFromTimestamp = filterValues.date_from
+    ? Math.floor(new Date(filterValues.date_from).getTime() / 1000)
+    : null;
+  
+  const dateToTimestamp = filterValues.date_to
+    ? Math.floor(new Date(filterValues.date_to + 'T23:59:59').getTime() / 1000)
+    : null;
+  
+  // 准备筛选条件对象
+  const newFilters = {
+    chat_type: filterValues.chat_type.length > 0 ? filterValues.chat_type : [],
+    date_from: dateFromTimestamp,
+    date_to: dateToTimestamp
+  };
+  
+  // 更新store中的filters并触发搜索
+  setFilters(newFilters);
+  fetchResults(undefined, 1); // 重置到第一页
+};
+```
+
+2. 修改了输入处理函数，实现自动应用：
+```javascript
+const handleChatTypeChange = (type, checked) => {
+  const updatedChatTypes = checked
+    ? [...localFilters.chat_type, type]
+    : localFilters.chat_type.filter(t => t !== type);
+  
+  const updatedFilters = {
+    ...localFilters,
+    chat_type: updatedChatTypes
+  };
+  
+  setLocalFilters(updatedFilters);
+  
+  // 自动应用筛选
+  applyFiltersWithValues(updatedFilters);
+};
+
+const handleDateChange = (field, value) => {
+  const updatedFilters = {
+    ...localFilters,
+    [field]: value
+  };
+  
+  setLocalFilters(updatedFilters);
+  
+  // 自动应用筛选
+  applyFiltersWithValues(updatedFilters);
+};
+```
+
+3. 更新了UI：
+   - 移除了"应用筛选"按钮
+   - 更新了提示文本，说明筛选条件会自动应用
+   - 保留了"清空筛选"按钮，方便用户快速重置所有筛选条件
+
+## 8. 最终功能总结
+
+现在前端筛选功能已完全实现，包括：
+
+1. **消息来源类别筛选：**
+   - 支持通过复选框选择多个聊天类型：私聊、群组、频道
+
+2. **时间段筛选：**
+   - 使用日期选择器选择开始日期和结束日期
+   - 默认设置结束日期为明天，开始日期为三个月前
+   - 日期自动转换为API需要的Unix时间戳格式
+
+3. **筛选条件自动应用：**
+   - 更改任何筛选选项时自动触发搜索
+   - 提供清空筛选按钮，方便用户重置
+
+4. **关键词高亮显示：**
+   - 正确解析和渲染API返回的高亮标记
+   - 美化高亮样式，使关键词更加突出
+   - 样式与Telegram主题集成
+
+5. **用户体验优化：**
+   - 可折叠的筛选面板设计
+   - 当有筛选条件应用时显示提示标志
+   - 适配响应式布局
