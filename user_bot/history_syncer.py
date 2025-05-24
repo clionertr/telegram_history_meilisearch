@@ -377,19 +377,25 @@ class HistorySyncer:
                 sender_id = message.sender_id
                 
                 try:
-                    # 尝试获取发送者详细信息
-                    client = self.client.get_client()
-                    sender = await client.get_entity(sender_id)
-                    
-                    if hasattr(sender, 'first_name'):
-                        sender_name = format_sender_name(
-                            getattr(sender, 'first_name', None),
-                            getattr(sender, 'last_name', None)
-                        )
-                    elif hasattr(sender, 'title'):
-                        sender_name = sender.title
+                    # 尝试直接从message.sender获取发送者详细信息
+                    if hasattr(message, 'sender') and message.sender:
+                        sender = message.sender
+                        if hasattr(sender, 'first_name'):
+                            sender_name = format_sender_name(
+                                getattr(sender, 'first_name', None),
+                                getattr(sender, 'last_name', None)
+                            )
+                        elif hasattr(sender, 'title'):
+                            sender_name = sender.title
+                    else:
+                        # 如果message.sender不存在或为None，记录日志
+                        logger.warning(f"无法从message对象获取发送者信息。sender_id: {sender_id}, "
+                                       f"message.sender: {getattr(message, 'sender', None)}, "
+                                       f"message.from_id: {getattr(message, 'from_id', None)}")
+                        sender_name = "未知发送者"  # 使用默认值
                 except Exception as e:
-                    logger.warning(f"获取发送者 {sender_id} 信息失败: {str(e)}")
+                    logger.warning(f"从message对象获取发送者 {sender_id} 信息失败: {str(e)}")
+                    sender_name = "未知发送者"  # 使用默认值
             
             # 生成唯一ID和消息链接
             message_id = message.id

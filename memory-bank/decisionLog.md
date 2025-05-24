@@ -145,3 +145,40 @@
 
 **关联 `activeContext.md` 记录:**
 详细的实现过程记录在 `memory-bank/activeContext.md` 中（由 💻 Code 模式在 2025-05-24 左右记录的部分）。
+---
+
+## 决策记录：优化 `history_syncer.py` 避免 API 速率限制
+
+**日期:** 2025-05-24
+
+**背景:**
+用户报告在 `user_bot/history_syncer.py` 的 `_build_message_doc` 方法中，由于频繁调用 `client.get_entity(sender_id)` ([`user_bot/history_syncer.py:382`](user_bot/history_syncer.py:382)) 获取发送者信息，导致了 Telegram API 的速率限制警告 ("A wait of X seconds is required (caused by GetUsersRequest)")。
+
+**决策者:** NexusCore (任务分配), 💻 Code (具体实现)
+
+**决策/设计要点:**
+
+1.  **移除 `client.get_entity(sender_id)` 调用:**
+    *   这是导致问题的直接原因，必须移除。
+
+2.  **利用 `message.sender`:**
+    *   Telethon 的 `Message` 对象通常会通过 `message.sender` 属性预加载发送者实体（如 `User` 或 `Chat` 对象）。优先使用此属性来获取发送者信息（如 `first_name`, `last_name`, `title`）。
+    *   这种方法避免了额外的 API 调用，从而解决了速率限制问题。
+
+3.  **增强日志记录与调试:**
+    *   如果 `message.sender` 不可用或未能提供足够的发送者名称信息，记录一条 WARNING 级别的日志。
+    *   该日志应包含 `sender_id`，以及 `message.sender` 和 `message.from_id` (如果存在) 的当前值，甚至可以考虑记录 `message.to_dict()` 的部分内容（如果适用且不过于冗长），以便用户协助分析 `message` 对象中实际包含的信息。
+
+4.  **默认值与健壮性:**
+    *   即使无法从 `message.sender` 或其他途径获取到发送者名称，程序也应继续正常处理该消息。
+    *   在这种情况下，`sender_name` 可以被设置为一个默认值，例如 "未知发送者" 或 `None`，确保 `MeiliMessageDoc` 对象的构建不会失败。
+
+**理由:**
+*   **性能与稳定性:** 直接使用 `message` 对象中已有的数据是最优选择，可以显著减少 API 调用次数，避免速率限制，提高同步的稳定性和效率。
+*   **问题可追溯性:** 详细的日志记录有助于在 `message.sender` 未按预期提供信息时，诊断问题原因或了解消息结构。
+*   **用户体验:** 减少了不必要的警告刷屏。
+
+**状态:** 已实施。
+
+**关联 `activeContext.md` 记录:**
+详细的分析、代码修改方案和验证过程记录在 [`memory-bank/activeContext.md`](memory-bank/activeContext.md) 中（由 💻 Code 模式在 2025-05-24 记录的部分，标题为 "2025-05-24: 修复 `history_syncer.py` 中的 `client.get_entity` 警告问题"）。
