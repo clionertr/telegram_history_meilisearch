@@ -487,3 +487,27 @@
 *   **详细日志:** 详细的分析、UI 设计、实现步骤、代码修改、问题修复和功能增强已记录在 [`memory-bank/activeContext.md`](memory-bank/activeContext.md:0) (版本：阶段 3 - 任务 2 完善前端功能 - 筛选)。
 
 ---
+---
+
+## 功能更新：最旧同步时间 (Oldest Sync Timestamp) - 完成 (由 NexusCore 记录)
+
+**日期:** 2025-05-24
+
+**状态:** 已完成
+
+**执行者:** 💻 Code (子任务)
+
+**概述:**
+成功实现了允许用户设置“最旧同步时间”的功能。早于此设定时间的历史消息将不会被缓存。此功能支持全局配置以及针对特定聊天的配置。
+
+**主要成果:**
+*   修改了 `whitelist.json` 以包含 `sync_settings`，用于存储全局和特定聊天的 `oldest_sync_timestamp`。
+*   更新了 `core/config_manager.py` 来处理新的配置，包括加载、解析时间戳（引入 `python-dateutil` 依赖）以及提供获取相应时间戳的方法。
+*   修改了 `user_bot/history_syncer.py`，使其在同步历史消息时遵循 `oldest_sync_timestamp` 的限制。
+*   在 `api/routers/whitelist.py` 中添加了新的 API 端点，用于管理这些同步设置。
+*   在 `search_bot/command_handlers.py` 中添加了新的 Bot 命令 (`/set_oldest_sync_time`, `/view_oldest_sync_time`)，方便管理员通过 Bot 进行配置。
+*   更新了项目设计文档 `FOLLOWME.md` 和相关的 Bot 帮助文档。
+*   为新增和修改的逻辑编写了单元测试。
+
+**相关 `activeContext.md` 记录:**
+详细的实现过程、思考和决策记录在 `memory-bank/activeContext.md` 中（由 💻 Code 模式在 2025-05-24 左右记录的部分）。

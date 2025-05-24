@@ -98,3 +98,50 @@
             *   为日期筛选设置了默认值 (例如，最近三个月到明天)。
         *   **关键词高亮修复:** 在 [`frontend/src/components/ResultItem.jsx`](frontend/src/components/ResultItem.jsx:0) 中使用 `dangerouslySetInnerHTML` 并添加自定义 CSS，以正确渲染和美化后端返回的 HTML 高亮标签。
         *   **集成:** 将 `FilterControls` 组件集成到主搜索页面 [`frontend/src/pages/SearchPage.jsx`](frontend/src/pages/SearchPage.jsx:0)。
+---
+
+## 决策记录：实现 "最旧同步时间" 功能 (Oldest Sync Timestamp)
+
+**日期:** 2025-05-24
+
+**背景:**
+用户请求添加一个功能，允许设置一个“最旧同步时间”，早于该时间的消息将不被缓存，以提供更灵活的数据管理并减少存储需求。
+
+**决策者:** NexusCore (任务分解与委派), 💻 Code (具体实现)
+
+**决策/设计要点:**
+
+1.  **配置存储 (`whitelist.json`):**
+    *   在 `whitelist.json` 文件中引入一个新的顶层键 `sync_settings`。
+    *   `sync_settings` 内部支持:
+        *   `global_oldest_sync_timestamp`: 一个可选的全局设置，适用于所有未单独配置的聊天。
+        *   按 `chat_id` (字符串键) 进行的特定聊天配置，每个聊天可拥有自己的 `oldest_sync_timestamp`。
+    *   时间戳格式支持 ISO 8601 字符串和 Unix 时间戳整数，以提供灵活性。
+
+2.  **配置管理 (`core/config_manager.py`):**
+    *   `ConfigManager` 负责加载和解析 `sync_settings`。
+    *   引入 `python-dateutil` 库来辅助解析 ISO 8601 格式的日期时间字符串，确保时间戳能被正确转换为 Python `datetime` 对象 (时区感知，UTC)。
+    *   提供方法 `get_oldest_sync_timestamp(chat_id)`，该方法会优先返回特定于聊天的设置，如果不存在，则返回全局设置，如果两者都不存在，则返回 `None`。
+    *   提供方法 `set_oldest_sync_timestamp(chat_id, timestamp)` 以便通过代码（例如API或Bot命令）更新这些设置。
+
+3.  **同步逻辑 (`user_bot/history_syncer.py`):**
+    *   `HistorySyncer` 在同步每个聊天的历史消息前，会从 `ConfigManager` 获取适用的 `oldest_sync_timestamp`。
+    *   如果在遍历历史消息时，某条消息的日期早于（或等于，根据实现细节）获取到的 `oldest_sync_timestamp`，则停止对该聊天更早消息的同步。
+
+4.  **用户接口:**
+    *   **API 接口 (`api/routers/whitelist.py`):** 为管理员提供 RESTful API 端点，用于查看和修改全局及特定聊天的 `oldest_sync_timestamp` 设置。
+    *   **Bot 命令 (`search_bot/command_handlers.py`):** 为管理员提供 Telegram Bot 命令 (`/set_oldest_sync_time`, `/view_oldest_sync_time`)，以方便直接通过聊天界面管理这些设置。
+
+5.  **依赖管理:**
+    *   将 `python-dateutil` 添加到 `requirements.txt`。
+
+**理由:**
+*   这种设计提供了足够的灵活性，允许用户根据需要进行全局或细粒度的控制。
+*   将配置管理集中在 `ConfigManager` 中，保持了代码的模块化和可维护性。
+*   提供 API 和 Bot 命令两种接口，满足了不同场景下的管理需求。
+*   使用 `python-dateutil` 简化了日期时间字符串的解析工作。
+
+**状态:** 已实施。
+
+**关联 `activeContext.md` 记录:**
+详细的实现过程记录在 `memory-bank/activeContext.md` 中（由 💻 Code 模式在 2025-05-24 左右记录的部分）。
