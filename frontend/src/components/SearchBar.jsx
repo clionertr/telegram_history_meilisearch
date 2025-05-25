@@ -58,6 +58,18 @@ function SearchBar() {
     setLocalQuery(e.target.value);
   };
 
+  /**
+   * 处理键盘事件
+   * @param {KeyboardEvent} e - 键盘事件
+   */
+  const handleKeyDown = (e) => {
+    // 当按下Enter键时，自动提交搜索
+    if (e.key === 'Enter' && localQuery.trim() && !isLoading) {
+      e.preventDefault();
+      handleSubmit(e);
+    }
+  };
+
   return (
     <div className="search-bar-container">
       <form onSubmit={handleSubmit} className="search-form">
@@ -81,6 +93,7 @@ function SearchBar() {
             type="text"
             value={localQuery}
             onChange={handleInputChange}
+            onKeyDown={handleKeyDown}
             placeholder="输入关键词搜索..."
             aria-label="搜索关键词"
             className="search-input"
@@ -88,34 +101,38 @@ function SearchBar() {
           />
         </div>
 
-        {/* 搜索按钮 - 在非Telegram环境或需要时显示 */}
-        {!isAvailable && (
-          <button
-            type="submit"
-            className="search-button"
-            disabled={isLoading || !localQuery.trim()}
-          >
-            {isLoading ? (
-              <div className="loading-spinner">
-                <svg className="animate-spin" width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-                  <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" strokeOpacity="0.3"/>
-                  <path d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" fill="currentColor"/>
-                </svg>
-                搜索中...
-              </div>
-            ) : (
-              '搜索'
-            )}
-          </button>
-        )}
+        {/* 搜索按钮 - 总是显示，变小并放在右侧 */}
+        <button
+          type="submit"
+          className="search-button-compact"
+          disabled={isLoading || !localQuery.trim()}
+          aria-label="搜索"
+        >
+          {isLoading ? (
+            <svg className="animate-spin" width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" strokeOpacity="0.3"/>
+              <path d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" fill="currentColor"/>
+            </svg>
+          ) : (
+            <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path
+                d="M21 21L16.514 16.506M19 10.5C19 15.194 15.194 19 10.5 19C5.806 19 2 15.194 2 10.5C2 5.806 5.806 2 10.5 2C15.194 2 19 5.806 19 10.5Z"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          )}
+        </button>
       </form>
 
       {/* 在Telegram Mini App中的提示信息 */}
       {isAvailable && (
         <div className="telegram-hint">
           {localQuery.trim()
-            ? "点击下方主按钮开始搜索"
-            : "请输入关键词后使用主按钮搜索"}
+            ? "点击搜索按钮或下方主按钮开始搜索"
+            : "请输入关键词后点击搜索按钮"}
         </div>
       )}
     </div>

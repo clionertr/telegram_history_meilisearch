@@ -90,7 +90,7 @@ function ResultsList() {
               strokeLinejoin="round"
             />
           </svg>
-          上一页
+          <span>上一页</span>
         </button>
 
         {/* 页码指示器 */}
@@ -107,7 +107,7 @@ function ResultsList() {
           className="pagination-btn"
           aria-label="下一页"
         >
-          下一页
+          <span>下一页</span>
           <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
             <path
               d="M9 18L15 12L9 6"

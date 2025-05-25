@@ -38,6 +38,8 @@
   flex-direction: column;
   background-color: var(--color-bg-primary);
   color: var(--color-text-primary);
+  width: 100%;
+  position: relative;
 }
 
 /* 头部导航栏 */
@@ -88,12 +90,13 @@
   flex: 1;
   display: flex;
   flex-direction: column;
-  max-width: 600px;
+  max-width: 100%;
   margin: 0 auto;
   width: 100%;
   padding: var(--spacing-xl) var(--spacing-lg);
   padding-bottom: calc(80px + var(--spacing-xl) + env(safe-area-inset-bottom)); /* 为底部导航栏留空间 */
   min-height: 0; /* 允许内容区域收缩 */
+  box-sizing: border-box;
 }
 
 /* SearchBar 组件样式 */
@@ -111,6 +114,9 @@
   display: flex;
   gap: var(--spacing-md);
   align-items: center;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 .search-input-wrapper {
@@ -155,6 +161,39 @@
   cursor: not-allowed;
 }
 
+/* 紧凑搜索按钮样式 */
+.search-button-compact {
+  background-color: var(--color-accent);
+  color: white;
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: var(--spacing-md);
+  cursor: pointer;
+  transition: all 0.2s ease;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 44px;
+  min-height: 44px;
+  flex-shrink: 0;
+}
+
+.search-button-compact:hover:not(:disabled) {
+  background-color: var(--color-accent-hover);
+  transform: translateY(-1px);
+}
+
+.search-button-compact:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+.search-button-compact:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* 保留原始搜索按钮样式以防需要 */
 .search-button {
   background-color: var(--color-accent);
   color: white;
@@ -216,7 +255,9 @@
 /* FilterControls 组件样式 */
 .filter-controls {
   width: 100%;
+  max-width: 100%;
   margin-bottom: var(--spacing-lg);
+  box-sizing: border-box;
 }
 
 .filter-header {
@@ -451,7 +492,9 @@
 /* ResultsList 组件样式 */
 .results-list {
   width: 100%;
+  max-width: 100%;
   flex: 1;
+  box-sizing: border-box;
 }
 
 .results-summary {
@@ -556,9 +599,10 @@
   display: flex;
   justify-content: center;
   align-items: center;
-  gap: var(--spacing-lg);
+  gap: var(--spacing-md);
   margin-top: var(--spacing-xl);
   padding: var(--spacing-lg);
+  flex-wrap: nowrap;
 }
 
 .pagination-btn {
@@ -630,6 +674,9 @@
   cursor: pointer;
   transition: all 0.2s ease;
   position: relative;
+  width: 100%;
+  max-width: 100%;
+  box-sizing: border-box;
 }
 
 .result-item:hover {
@@ -800,7 +847,92 @@
   line-height: 1;
 }
 
-/* 响应式设计 */
+/* 超小屏幕适配 */
+@media (max-width: 480px) {
+  .app-main {
+    padding: var(--spacing-md) var(--spacing-sm);
+    padding-bottom: calc(70px + var(--spacing-md) + env(safe-area-inset-bottom));
+  }
+
+  .search-form {
+    padding: var(--spacing-sm);
+    gap: var(--spacing-sm);
+  }
+
+  .search-input-wrapper {
+    padding: var(--spacing-sm) var(--spacing-md);
+    padding-left: 36px;
+  }
+
+  .search-icon {
+    left: var(--spacing-sm);
+  }
+
+  .search-button-compact {
+    min-width: 36px;
+    min-height: 36px;
+    padding: var(--spacing-xs);
+  }
+
+  .filter-header,
+  .filter-content {
+    padding: var(--spacing-sm);
+  }
+
+  .result-item {
+    padding: var(--spacing-sm);
+  }
+
+  .result-avatar {
+    width: 32px;
+    height: 32px;
+    font-size: var(--font-size-sm);
+  }
+
+  .result-content {
+    margin-left: 40px;
+  }
+
+  .pagination {
+    gap: var(--spacing-xs);
+    padding: var(--spacing-sm);
+  }
+
+  .pagination-btn {
+    padding: var(--spacing-xs) var(--spacing-sm);
+    font-size: var(--font-size-xs);
+  }
+
+  .pagination-btn span {
+    display: none; /* 在超小屏幕上隐藏文字，只显示图标 */
+  }
+
+  .pagination-info {
+    padding: var(--spacing-xs) var(--spacing-sm);
+    font-size: var(--font-size-xs);
+  }
+
+  .bottom-nav {
+    height: 60px;
+  }
+
+  .nav-item {
+    min-width: 45px;
+    min-height: 45px;
+    gap: 1px;
+  }
+
+  .nav-icon {
+    width: 18px;
+    height: 18px;
+  }
+
+  .nav-label {
+    font-size: 9px;
+  }
+}
+
+/* 小屏幕适配 */
 @media (max-width: 640px) {
   .header-content {
     padding: var(--spacing-md) var(--spacing-lg);
@@ -821,13 +953,12 @@
 
   .search-form {
     padding: var(--spacing-md);
-    flex-direction: column;
-    gap: var(--spacing-md);
   }
 
-  .search-button {
-    width: 100%;
-    justify-content: center;
+  .search-button-compact {
+    min-width: 40px;
+    min-height: 40px;
+    padding: var(--spacing-sm);
   }
 
   .filter-header,
@@ -851,13 +982,25 @@
   }
 
   .pagination {
-    flex-direction: column;
-    gap: var(--spacing-md);
+    flex-direction: row;
+    gap: var(--spacing-sm);
+    padding: var(--spacing-md);
   }
 
   .pagination-btn {
-    width: 100%;
+    width: auto;
     justify-content: center;
+    padding: var(--spacing-sm) var(--spacing-md);
+    font-size: var(--font-size-sm);
+  }
+
+  .pagination-btn span {
+    display: inline; /* 在小屏幕上显示文字 */
+  }
+
+  .pagination-info {
+    padding: var(--spacing-sm) var(--spacing-md);
+    font-size: var(--font-size-sm);
   }
 
   .result-item {
@@ -903,21 +1046,237 @@
   }
 }
 
-/* 平板和桌面端适配 */
-@media (min-width: 768px) {
+/* 平板端适配 */
+@media (min-width: 641px) and (max-width: 1024px) {
   .app-container {
-    max-width: 600px;
+    max-width: 768px;
     margin: 0 auto;
     box-shadow: var(--shadow-lg);
   }
 
+  .app-main {
+    max-width: 768px;
+    padding: var(--spacing-2xl) var(--spacing-xl);
+    padding-bottom: calc(80px + var(--spacing-2xl) + env(safe-area-inset-bottom));
+  }
+
+  .search-form {
+    padding: var(--spacing-lg);
+  }
+
   .bottom-nav {
-    max-width: 600px;
+    max-width: 768px;
     margin: 0 auto;
     left: 50%;
     transform: translateX(-50%);
     border-left: 1px solid var(--color-border);
     border-right: 1px solid var(--color-border);
+  }
+
+  .chat-type-grid {
+    grid-template-columns: repeat(4, 1fr);
+  }
+
+  .date-range {
+    flex-direction: row;
+    align-items: flex-end;
+  }
+
+  .date-separator {
+    text-align: center;
+    margin-top: 20px;
+  }
+
+  .pagination {
+    flex-direction: row;
+    justify-content: center;
+  }
+
+  .pagination-btn {
+    width: auto;
+  }
+}
+
+/* 桌面端适配 */
+@media (min-width: 1025px) {
+  .app-container {
+    max-width: 1000px;
+    margin: 0 auto;
+    box-shadow: var(--shadow-lg);
+    min-height: 100vh;
+  }
+
+  .app-main {
+    max-width: 1000px;
+    padding: var(--spacing-3xl) var(--spacing-2xl);
+    padding-bottom: calc(90px + var(--spacing-3xl) + env(safe-area-inset-bottom));
+  }
+
+  .search-form {
+    padding: var(--spacing-xl);
+    max-width: 600px;
+    margin: 0 auto;
+  }
+
+  .search-input-wrapper {
+    padding: var(--spacing-lg) var(--spacing-xl);
+    padding-left: 52px;
+  }
+
+  .search-icon {
+    left: var(--spacing-lg);
+  }
+
+  .search-button-compact {
+    min-width: 48px;
+    min-height: 48px;
+    padding: var(--spacing-lg);
+  }
+
+  .filter-controls {
+    max-width: 600px;
+    margin: 0 auto var(--spacing-xl) auto;
+  }
+
+  .results-list {
+    max-width: 700px;
+    margin: 0 auto;
+  }
+
+  .bottom-nav {
+    max-width: 1000px;
+    margin: 0 auto;
+    left: 50%;
+    transform: translateX(-50%);
+    border-left: 1px solid var(--color-border);
+    border-right: 1px solid var(--color-border);
+    height: 90px;
+  }
+
+  .nav-item {
+    min-width: 70px;
+    min-height: 70px;
+    gap: var(--spacing-sm);
+  }
+
+  .nav-icon {
+    width: 28px;
+    height: 28px;
+  }
+
+  .nav-label {
+    font-size: var(--font-size-sm);
+  }
+
+  .chat-type-grid {
+    grid-template-columns: repeat(4, 1fr);
+    gap: var(--spacing-lg);
+  }
+
+  .chat-type-content {
+    padding: var(--spacing-lg);
+  }
+
+  .date-range {
+    flex-direction: row;
+    align-items: flex-end;
+    gap: var(--spacing-xl);
+  }
+
+  .date-separator {
+    text-align: center;
+    margin-top: 20px;
+  }
+
+  .pagination {
+    flex-direction: row;
+    justify-content: center;
+    gap: var(--spacing-xl);
+  }
+
+  .pagination-btn {
+    width: auto;
+    padding: var(--spacing-lg) var(--spacing-xl);
+  }
+
+  .result-item {
+    padding: var(--spacing-xl);
+    margin-bottom: var(--spacing-lg);
+  }
+
+  .result-item:hover {
+    transform: translateY(-2px);
+  }
+
+  .result-avatar {
+    width: 48px;
+    height: 48px;
+    font-size: var(--font-size-xl);
+  }
+
+  .result-content {
+    margin-left: 60px;
+  }
+
+  .result-text {
+    -webkit-line-clamp: 3; /* 桌面端显示更多行 */
+  }
+
+  /* 桌面端鼠标悬停效果 */
+  .search-button-compact:hover:not(:disabled) {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-lg);
+  }
+
+  .filter-header:hover {
+    transform: translateY(-1px);
+  }
+
+  .nav-item:hover {
+    background-color: var(--color-input-bg);
+    transform: translateY(-1px);
+  }
+}
+
+/* 超大屏幕适配 */
+@media (min-width: 1440px) {
+  .app-container {
+    max-width: 1200px;
+  }
+
+  .app-main {
+    max-width: 1200px;
+    padding: var(--spacing-3xl) var(--spacing-3xl);
+  }
+
+  .search-form {
+    max-width: 800px;
+  }
+
+  .filter-controls {
+    max-width: 800px;
+  }
+
+  .results-list {
+    max-width: 900px;
+  }
+
+  .bottom-nav {
+    max-width: 1200px;
+  }
+
+  .result-item {
+    padding: var(--spacing-2xl);
+  }
+
+  .result-avatar {
+    width: 56px;
+    height: 56px;
+    font-size: var(--font-size-xl);
+  }
+
+  .result-content {
+    margin-left: 72px;
   }
 }
 
