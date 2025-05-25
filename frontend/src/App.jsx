@@ -1,6 +1,10 @@
 import { useEffect } from 'react';
 import SearchPage from './pages/SearchPage';
+import GroupsPage from './pages/GroupsPage';
+import SettingsPage from './pages/SettingsPage';
+import BottomNavBar from './components/navigation/BottomNavBar';
 import useTelegramSDK from './hooks/useTelegramSDK';
+import useNavStore from './store/navStore';
 import './App.css';
 
 /**
@@ -15,6 +19,9 @@ function App() {
     themeParams,
     getThemeCssVars
   } = useTelegramSDK();
+  
+  // 获取当前选中的导航项
+  const { activeNav } = useNavStore();
 
   // 将Telegram主题应用到整个应用
   useEffect(() => {
@@ -44,10 +51,24 @@ function App() {
     }
     return displayName.trim() || '用户';
   };
+  
+  // 根据当前选中的导航项渲染对应页面
+  const renderPage = () => {
+    switch (activeNav) {
+      case 'search':
+        return <SearchPage />;
+      case 'groups':
+        return <GroupsPage />;
+      case 'settings':
+        return <SettingsPage />;
+      default:
+        return <SearchPage />;
+    }
+  };
 
   return (
     <div
-      className="min-h-screen text-gray-900 dark:text-gray-100"
+      className="min-h-screen text-gray-900 dark:text-gray-100 pb-16" // 添加底部内边距，为导航栏留出空间
       style={isAvailable ? {
         backgroundColor: 'var(--tg-theme-bg-color, rgb(243 244 246))',
         color: 'var(--tg-theme-text-color, rgb(17 24 39))'
@@ -72,8 +93,11 @@ function App() {
         </div>
       )}
       
-      {/* 主内容区域 - 搜索页面 */}
-      <SearchPage />
+      {/* 主内容区域 - 根据导航切换 */}
+      {renderPage()}
+      
+      {/* 底部导航栏 */}
+      <BottomNavBar />
     </div>
   );
 }
