@@ -595,3 +595,15 @@
         *   为“群组”页面 ([`frontend/src/pages/GroupsPage.jsx`](frontend/src/pages/GroupsPage.jsx:0)) 提供了占位实现。
     *   代码结构清晰，组件封装良好，注重可复用性和可维护性。
 *   **详细日志:** 详细的实现过程、状态管理设计、组件架构、UI实现细节、交互逻辑以及文件结构总结已记录在 [`memory-bank/activeContext.md`](memory-bank/activeContext.md:0) (版本：阶段 2: 前端组件实现)。
+---
+
+### 功能更新: SearchBot 自动设置快捷命令列表 (已完成)
+*   **完成时间:** 2025/5/25 下午8:35 (用户确认时间)
+*   **执行者:** 💻 Code Mode (子任务)
+*   **主要成果:**
+    *   在 [`search_bot/bot.py`](search_bot/bot.py:0) 中定义了 `DEFAULT_COMMANDS` 列表，包含了 SearchBot 支持的所有命令及其描述。
+    *   在 `SearchBot` 类中添加了 `async def set_bot_commands(self)` 方法，使用 Telethon 的 `SetBotCommandsRequest` 和 `BotCommandScopeDefault` 来设置命令。
+    *   在 `SearchBot` 的 `run()` 方法中，于客户端成功启动并获取自身信息后调用 `set_bot_commands()`，确保每次启动时都能更新命令列表。
+    *   修复了最初实现时误用 `edit_bot_commands` 的 API 调用问题。
+    *   现在，当 SearchBot 启动时，会自动将其支持的命令列表发送给 BotFather，用户在与 Bot 对话时可以看到命令提示、自动完成和命令描述。
+*   **详细日志:** 详细的实现步骤、代码分析、API 调用修复过程已记录在 [`memory-bank/activeContext.md`](memory-bank/activeContext.md:0) (版本：SearchBot 快捷命令列表设置功能实现)。

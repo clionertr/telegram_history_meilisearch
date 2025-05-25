@@ -16,6 +16,9 @@ import asyncio
 
 from telethon import TelegramClient
 from telethon.errors import ApiIdInvalidError, AuthKeyUnregisteredError
+from telethon.tl.types import BotCommand
+from telethon.tl.functions.bots import SetBotCommandsRequest
+from telethon.tl.types import BotCommandScopeDefault
 
 from core.config_manager import ConfigManager
 from core.meilisearch_service import MeiliSearchService
@@ -27,6 +30,26 @@ logger = logging.getLogger(__name__)
 
 # 会话文件目录
 SESSIONS_DIR = ".sessions"
+
+# 默认命令列表，用于设置Telegram Bot的快捷命令
+DEFAULT_COMMANDS = [
+    BotCommand(command="start", description="欢迎使用并显示帮助信息"),
+    BotCommand(command="help", description="显示帮助信息"),
+    BotCommand(command="search", description="搜索消息，支持高级语法"),
+    BotCommand(command="get_dialogs", description="获取用户所有对话列表 (管理员)"),
+    BotCommand(command="add_whitelist", description="添加用户/群组到白名单 (管理员)"),
+    BotCommand(command="remove_whitelist", description="从白名单移除用户/群组 (管理员)"),
+    BotCommand(command="set_userbot_config", description="设置User Bot的API ID和HASH (管理员)"),
+    BotCommand(command="view_userbot_config", description="查看User Bot的API ID和HASH (管理员)"),
+    BotCommand(command="restart_userbot", description="重启User Bot (管理员)"),
+    BotCommand(command="set_oldest_sync_time", description="设置最旧同步时间 (管理员)"),
+    BotCommand(command="view_oldest_sync_time", description="查看最旧同步时间 (管理员)"),
+    BotCommand(command="view_search_config", description="查看搜索缓存配置 (管理员)"),
+    BotCommand(command="set_search_config", description="设置搜索缓存配置 (管理员)"),
+    BotCommand(command="clear_search_cache", description="清空搜索缓存 (管理员)"),
+    BotCommand(command="view_dialogs_cache", description="查看对话缓存状态 (管理员)"),
+    BotCommand(command="clear_dialogs_cache", description="清空对话缓存 (管理员)"),
+]
 
 
 class SearchBot:
@@ -141,6 +164,26 @@ class SearchBot:
         
         logger.info("已注册所有事件处理器")
     
+    async def set_bot_commands(self) -> None:
+        """
+        设置Bot的快捷命令列表
+        
+        将预定义的命令列表发送给BotFather，使用户在与Bot对话时
+        可以看到命令提示和自动完成。
+        """
+        try:
+            # 使用正确的Telethon API设置Bot命令列表
+            await self.client(SetBotCommandsRequest(
+                scope=BotCommandScopeDefault(),
+                lang_code='',
+                commands=DEFAULT_COMMANDS
+            ))
+            logger.info(f"已成功设置Bot命令列表，共 {len(DEFAULT_COMMANDS)} 个命令")
+            
+        except Exception as e:
+            logger.error(f"设置Bot命令列表时出错: {e}")
+            # 不抛出异常，因为这不是关键功能，不应阻止Bot启动
+    
     async def run(self) -> None:
         """
         启动 Search Bot
@@ -160,6 +203,9 @@ class SearchBot:
             me = await self.client.get_me()
             logger.info(f"Search Bot 启动成功! Bot: @{me.username}")
             print(f"Search Bot (@{me.username}) 已成功启动并正在运行...")
+            
+            # 设置Bot命令列表
+            await self.set_bot_commands()
             
             # 保持运行直到断开连接
             await self.client.run_until_disconnected()

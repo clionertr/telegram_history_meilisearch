@@ -303,3 +303,46 @@
 *   底部导航栏提供了核心功能的快速访问路径。
 
 **状态:** 设计方案已由 Code 模式完成，并记录在 [`memory-bank/activeContext.md`](memory-bank/activeContext.md:0)。NexusCore 已审查。准备进入实现阶段。
+---
+
+## 决策记录：SearchBot 自动设置快捷命令列表
+
+**日期:** 2025-05-25
+
+**背景:**
+为了提升用户体验，需要在 SearchBot 启动时自动向 Telegram BotFather注册其支持的命令列表，以便用户可以在聊天界面中方便地看到命令提示、自动完成和命令描述。
+
+**决策者:** NexusCore (任务委派), 💻 Code (具体实现)
+
+**决策/设计要点:**
+
+1.  **命令定义 (`search_bot/bot.py`):**
+    *   在 `SearchBot` 类或其相关模块中，定义一个名为 `DEFAULT_COMMANDS` 的列表。
+    *   此列表包含所有 SearchBot 支持的 `telethon.tl.types.BotCommand` 对象，每个对象包含 `command` (不带 `/`) 和 `description`。
+    *   命令描述应清晰明了，并与 `/help` 命令的输出保持一致。
+
+2.  **设置方法 (`search_bot/bot.py`):**
+    *   在 `SearchBot` 类中实现一个新的异步方法 `async def set_bot_commands(self)`。
+    *   此方法使用 Telethon 的底层 API `telethon.tl.functions.bots.SetBotCommandsRequest` 来设置命令。
+    *   命令的作用域 (`scope`) 设置为 `telethon.tl.types.BotCommandScopeDefault()`，表示这些命令适用于所有用户。
+    *   `lang_code` 设置为 `'en'` (或根据需要调整为其他语言代码，但通常 BotFather 默认处理英文命令描述较好)。
+    *   包含错误处理逻辑，确保即使命令设置失败（例如网络问题或 API 限制），Bot 也能继续启动和运行，并记录相应的错误日志。
+
+3.  **集成到启动流程 (`search_bot/bot.py`):**
+    *   在 `SearchBot` 类的 `run()` 方法中，当 Telethon 客户端成功启动 (`await self.client.start(...)`) 并获取到 Bot 自身信息 (`await self.client.get_me()`) 之后，调用 `await self.set_bot_commands()`。
+    *   这样可以确保每次 Bot 启动时，命令列表都会被更新或设置。
+
+4.  **API 选择与修复:**
+    *   最初尝试使用 `client.edit_bot_commands()`，但发现该方法在当前使用的 Telethon 版本中可能不存在或行为不符合预期。
+    *   最终确定并修复为使用更稳定和正确的底层 API 调用 `client(SetBotCommandsRequest(...))`。
+
+**理由:**
+*   **用户体验:** 自动设置命令列表极大地改善了用户与 Bot 的交互体验，提供了便捷的命令发现和使用方式。
+*   **Telethon API 准确性:** 选择使用 `SetBotCommandsRequest` 是因为它是 Telethon 中用于设置机器人命令的官方且推荐的方式，确保了功能的稳定性和兼容性。
+*   **健壮性:** 在 `set_bot_commands` 方法中加入错误处理，可以防止因命令设置失败而导致整个 Bot 无法启动。
+*   **维护性:** 将命令定义和设置逻辑封装在 `SearchBot` 类中，使得代码更易于管理和维护。
+
+**状态:** 已实施。
+
+**关联 `activeContext.md` 记录:**
+详细的实现过程、API 选择和修复记录在 [`memory-bank/activeContext.md`](memory-bank/activeContext.md:0) 中（由 💻 Code 模式在 2025-05-25 记录的部分，标题为 "SearchBot 快捷命令列表设置功能实现"）。
