@@ -628,3 +628,19 @@
         *   **已完全对接:** 白名单管理、缓存管理 (通过新API)。
         *   **前端UI存在，但后端行为待集成:** 自动同步频率、历史数据范围、通知设置。这些前端选项目前不影响 User Bot 的实际行为。
 *   **详细日志:** 详细的实现过程、设计决策、代码实现、API 设计以及对现有设置项后端对接情况的分析已记录在 [`memory-bank/activeContext.md`](memory-bank/activeContext.md:0) (版本：前端设置页面完善 - 白名单管理和用户体验改进)。
+---
+### 任务: 前端设置页面 - 缓存管理功能增强 (已完成)
+*   **完成时间:** 2025/5/25 (根据 `activeContext.md` 的最后内容推断)
+*   **执行者:** 💻 Code Mode
+*   **主要成果:**
+    *   **二次确认功能:**
+        *   为清除缓存操作添加了通用的确认对话框组件 ([`frontend/src/components/common/ConfirmDialog.jsx`](frontend/src/components/common/ConfirmDialog.jsx:0))。
+        *   在缓存管理界面 ([`frontend/src/components/settings/CacheManagement.jsx`](frontend/src/components/settings/CacheManagement.jsx:0)) 集成了二次确认流程，提高了操作安全性。
+    *   **底部栏自动控制:**
+        *   增强了导航状态管理 ([`frontend/src/store/navStore.js`](frontend/src/store/navStore.js:0))，增加了控制底部导航栏可见性的功能。
+        *   实现了在打开缓存管理等模态框时自动隐藏底部导航栏，关闭时自动恢复 ([`frontend/src/App.jsx`](frontend/src/App.jsx:0), [`frontend/src/components/settings/CacheManagement.jsx`](frontend/src/components/settings/CacheManagement.jsx:0))，优化了界面空间利用和用户体验。
+    *   **用户体验改进:**
+        *   确认对话框会显示具体操作内容，并提供清晰的警告和不可撤销提示。
+*   **详细日志:** 详细的实现过程、组件设计和交互逻辑已记录在 [`memory-bank/activeContext.md`](memory-bank/activeContext.md:0) (版本：缓存管理功能增强)。
+
+---
