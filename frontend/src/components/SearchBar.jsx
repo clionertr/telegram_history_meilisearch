@@ -3,8 +3,8 @@ import useSearchStore from '../store/searchStore';
 import useTelegramSDK from '../hooks/useTelegramSDK';
 
 /**
- * 搜索栏组件
- * 包含搜索输入框和提交按钮
+ * 搜索栏组件 - 阶段3重构版本
+ * 实现卡片式设计和新的视觉风格
  */
 function SearchBar() {
   // 从store获取状态和action
@@ -27,28 +27,11 @@ function SearchBar() {
   
   // Refs用于直接操作DOM元素
   const inputRef = useRef(null);
-  const buttonRef = useRef(null);
 
   // 当store中的query改变时，更新本地状态
   useEffect(() => {
     setLocalQuery(storeQuery);
   }, [storeQuery]);
-
-  // 应用Telegram主题到输入框和按钮
-  useEffect(() => {
-    if (isAvailable && themeParams && inputRef.current) {
-      // 应用输入框样式
-      inputRef.current.style.borderColor = themeParams.hint_color;
-      inputRef.current.style.backgroundColor = themeParams.secondary_bg_color;
-      inputRef.current.style.color = themeParams.text_color;
-    }
-    
-    if (isAvailable && themeParams && buttonRef.current) {
-      // 应用按钮样式
-      buttonRef.current.style.backgroundColor = themeParams.button_color;
-      buttonRef.current.style.color = themeParams.button_text_color;
-    }
-  }, [isAvailable, themeParams]);
 
   /**
    * 处理搜索提交
@@ -62,10 +45,8 @@ function SearchBar() {
       setQuery(localQuery);
       fetchResults(localQuery, 1); // 重置到第一页
       
-      // 在非TMA环境下或按钮点击时触发触觉反馈
-      if (!isAvailable || e.type === 'click') {
-        triggerHapticFeedback('impact');
-      }
+      // 触发触觉反馈
+      triggerHapticFeedback('impact');
     }
   };
 
@@ -77,59 +58,67 @@ function SearchBar() {
     setLocalQuery(e.target.value);
   };
 
-  // 根据是否在Telegram环境中确定提示文本颜色
-  const hintTextStyle = isAvailable && themeParams
-    ? { color: themeParams.hint_color }
-    : { color: 'rgb(107 114 128)' };
-
   return (
-    <form onSubmit={handleSubmit} className="w-full mb-6">
-      <div className="flex">
-        <input
-          ref={inputRef}
-          type="text"
-          value={localQuery}
-          onChange={handleInputChange}
-          placeholder="输入关键词搜索..."
-          aria-label="搜索关键词"
-          className="flex-grow px-4 py-2 border rounded-l-lg focus:outline-none"
-          style={isAvailable && themeParams ? {
-            border: `1px solid ${themeParams.hint_color}`,
-            backgroundColor: themeParams.secondary_bg_color,
-            color: themeParams.text_color,
-          } : {}}
-          disabled={isLoading}
-        />
-        
-        {/* 非Telegram环境下显示搜索按钮 */}
+    <div className="search-bar-container">
+      <form onSubmit={handleSubmit} className="search-form">
+        <div className="search-input-wrapper">
+          {/* 搜索图标 */}
+          <div className="search-icon">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <path
+                d="M21 21L16.514 16.506M19 10.5C19 15.194 15.194 19 10.5 19C5.806 19 2 15.194 2 10.5C2 5.806 5.806 2 10.5 2C15.194 2 19 5.806 19 10.5Z"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+              />
+            </svg>
+          </div>
+          
+          {/* 搜索输入框 */}
+          <input
+            ref={inputRef}
+            type="text"
+            value={localQuery}
+            onChange={handleInputChange}
+            placeholder="输入关键词搜索..."
+            aria-label="搜索关键词"
+            className="search-input"
+            disabled={isLoading}
+          />
+        </div>
+
+        {/* 搜索按钮 - 在非Telegram环境或需要时显示 */}
         {!isAvailable && (
           <button
-            ref={buttonRef}
             type="submit"
-            className="px-4 py-2 text-white rounded-r-lg focus:outline-none disabled:opacity-50"
-            style={isAvailable && themeParams ? {
-              backgroundColor: themeParams.button_color,
-              color: themeParams.button_text_color,
-            } : {
-              backgroundColor: 'rgb(59 130 246)',
-              color: 'white',
-            }}
+            className="search-button"
             disabled={isLoading || !localQuery.trim()}
           >
-            {isLoading ? '搜索中...' : '搜索'}
+            {isLoading ? (
+              <div className="loading-spinner">
+                <svg className="animate-spin" width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+                  <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" strokeOpacity="0.3"/>
+                  <path d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" fill="currentColor"/>
+                </svg>
+                搜索中...
+              </div>
+            ) : (
+              '搜索'
+            )}
           </button>
         )}
-      </div>
+      </form>
 
-      {/* 在Telegram Mini App中，使用MainButton触发搜索 */}
+      {/* 在Telegram Mini App中的提示信息 */}
       {isAvailable && (
-        <div className="mt-2 text-sm" style={hintTextStyle}>
+        <div className="telegram-hint">
           {localQuery.trim()
             ? "点击下方主按钮开始搜索"
             : "请输入关键词后使用主按钮搜索"}
         </div>
       )}
-    </form>
+    </div>
   );
 }
 

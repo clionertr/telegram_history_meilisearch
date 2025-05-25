@@ -8,7 +8,7 @@ import useNavStore from './store/navStore';
 import './App.css';
 
 /**
- * 应用主组件
+ * 应用主组件 - 阶段3重构版本
  */
 function App() {
   // 使用自定义TMA SDK钩子
@@ -30,10 +30,13 @@ function App() {
         // 获取CSS变量对象
         const cssVars = getThemeCssVars();
         
-        // 将CSS变量应用到根元素
+        // 将CSS变量应用到根元素，但保持我们的设计系统优先
         const root = document.documentElement;
         Object.entries(cssVars).forEach(([key, value]) => {
-          root.style.setProperty(key, value);
+          // 只应用特定的Telegram主题变量，避免覆盖我们的设计系统
+          if (key.includes('--tg-theme')) {
+            root.style.setProperty(key, value);
+          }
         });
       } catch (error) {
         console.error('应用主题到根元素失败:', error);
@@ -66,35 +69,42 @@ function App() {
     }
   };
 
+  // 获取页面标题
+  const getPageTitle = () => {
+    switch (activeNav) {
+      case 'search':
+        return 'Telegram 中文历史消息搜索';
+      case 'groups':
+        return '群组';
+      case 'settings':
+        return '设置';
+      default:
+        return 'Telegram 中文历史消息搜索';
+    }
+  };
+
   return (
-    <div
-      className="min-h-screen text-gray-900 dark:text-gray-100 pb-16" // 添加底部内边距，为导航栏留出空间
-      style={isAvailable ? {
-        backgroundColor: 'var(--tg-theme-bg-color, rgb(243 244 246))',
-        color: 'var(--tg-theme-text-color, rgb(17 24 39))'
-      } : {
-        backgroundColor: 'rgb(243 244 246)',
-        color: 'rgb(17 24 39)'
-      }}
-    >
-      {/* 用户信息显示区域 */}
-      {isAvailable && userInfo && (
-        <div
-          className="p-2 text-center"
-          style={{
-            backgroundColor: 'var(--tg-theme-secondary-bg-color, rgb(219 234 254))',
-            color: 'var(--tg-theme-text-color, rgb(17 24 39))',
-          }}
-        >
-          <p className="text-sm">
-            欢迎，{getUserDisplayName()}
-            {userInfo.username ? ` (@${userInfo.username})` : ''}
-          </p>
+    <div className="app-container">
+      {/* 头部导航栏 */}
+      <header className="app-header">
+        <div className="header-content">
+          <h1 className="page-title">{getPageTitle()}</h1>
+          {/* 用户信息显示区域 - 仅在Telegram环境中显示 */}
+          {isAvailable && userInfo && (
+            <div className="user-info">
+              <span className="user-name">
+                {getUserDisplayName()}
+                {userInfo.username ? ` (@${userInfo.username})` : ''}
+              </span>
+            </div>
+          )}
         </div>
-      )}
+      </header>
       
-      {/* 主内容区域 - 根据导航切换 */}
-      {renderPage()}
+      {/* 主内容区域 */}
+      <main className="app-main">
+        {renderPage()}
+      </main>
       
       {/* 底部导航栏 */}
       <BottomNavBar />

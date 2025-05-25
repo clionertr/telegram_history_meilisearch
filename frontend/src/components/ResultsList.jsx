@@ -4,8 +4,8 @@ import useTelegramSDK from '../hooks/useTelegramSDK';
 import ResultItem from './ResultItem';
 
 /**
- * 搜索结果列表组件
- * 显示搜索结果，处理分页，展示不同状态（加载中、无结果、错误）
+ * 搜索结果列表组件 - 阶段3重构版本
+ * 实现新的卡片式设计和现代化布局
  */
 function ResultsList() {
   // 从store获取状态和actions
@@ -19,11 +19,7 @@ function ResultsList() {
   } = useSearchStore();
 
   // 使用TMA SDK钩子
-  const {
-    isAvailable,
-    themeParams,
-    triggerHapticFeedback
-  } = useTelegramSDK();
+  const { triggerHapticFeedback } = useTelegramSDK();
 
   // 解构分页信息
   const { currentPage, totalPages, totalHits, hitsPerPage } = pagination;
@@ -55,13 +51,8 @@ function ResultsList() {
     if (isLoading && !results.length) return null; // 首次加载时不显示标题
     if (!results.length) return null; // 无结果时不显示标题
 
-    // 根据Telegram主题设置文本颜色
-    const textStyle = isAvailable && themeParams
-      ? { color: themeParams.hint_color }
-      : {};
-
     return (
-      <div className="mb-4 text-sm" style={textStyle}>
+      <div className="results-summary">
         {totalHits > 0 ? (
           <p>
             共 {totalHits} 条结果，当前显示第 {startItem}-{endItem} 条
@@ -81,111 +72,107 @@ function ResultsList() {
     
     if (totalPages <= 1 && !apiLimitedResults) return null;
 
-    // 设置Telegram主题样式
-    const buttonStyle = isAvailable && themeParams ? {
-      border: `1px solid ${themeParams.hint_color}`,
-      color: themeParams.text_color
-    } : {};
-
-    const paginationTextStyle = isAvailable && themeParams ? {
-      color: themeParams.text_color
-    } : {};
-
     return (
-      <div className="flex justify-center items-center mt-6 space-x-2">
+      <div className="pagination">
         {/* 上一页按钮 */}
         <button
           onClick={() => handlePageChange(currentPage - 1)}
           disabled={currentPage === 1}
-          className="px-3 py-1 rounded border disabled:opacity-50 disabled:cursor-not-allowed"
-          style={buttonStyle}
+          className="pagination-btn"
           aria-label="上一页"
         >
-          ← 上一页
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path
+              d="M15 18L9 12L15 6"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
+          上一页
         </button>
 
         {/* 页码指示器 */}
-        <span className="px-3 py-1" style={paginationTextStyle}>
-          {currentPage} / {totalPages}
-        </span>
+        <div className="pagination-info">
+          <span className="current-page">{currentPage}</span>
+          <span className="page-separator">/</span>
+          <span className="total-pages">{totalPages}</span>
+        </div>
 
         {/* 下一页按钮 */}
         <button
           onClick={() => handlePageChange(currentPage + 1)}
           disabled={currentPage === totalPages}
-          className="px-3 py-1 rounded border disabled:opacity-50 disabled:cursor-not-allowed"
-          style={buttonStyle}
+          className="pagination-btn"
           aria-label="下一页"
         >
-          下一页 →
+          下一页
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path
+              d="M9 18L15 12L9 6"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
         </button>
       </div>
     );
   };
 
-  // Telegram主题下的加载动画样式
-  const loadingSpinnerStyle = isAvailable && themeParams ? {
-    borderTopColor: themeParams.button_color,
-    borderBottomColor: themeParams.button_color
-  } : {
-    borderTopColor: 'rgb(59 130 246)',
-    borderBottomColor: 'rgb(59 130 246)'
-  };
-
-  // 错误消息样式
-  const errorStyle = isAvailable && themeParams ? {
-    backgroundColor: 'rgba(254, 226, 226, 0.5)',
-    borderColor: 'rgb(252, 165, 165)',
-    color: 'rgb(185, 28, 28)'
-  } : {};
-
-  // 无结果状态样式
-  const noResultsStyle = isAvailable && themeParams ? {
-    backgroundColor: themeParams.secondary_bg_color,
-    color: themeParams.hint_color
-  } : {};
-
   return (
-    <div className="w-full">
+    <div className="results-list">
       {/* 标题区域 */}
       {renderTitle()}
 
       {/* 加载状态 */}
       {isLoading && (
-        <div className="flex justify-center my-8">
-          <div
-            className="animate-spin rounded-full h-12 w-12 border-t-2 border-b-2"
-            style={loadingSpinnerStyle}
-          ></div>
+        <div className="loading-state">
+          <div className="loading-spinner">
+            <svg className="animate-spin" width="32" height="32" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" strokeOpacity="0.3"/>
+              <path d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" fill="currentColor"/>
+            </svg>
+            <span>搜索中...</span>
+          </div>
         </div>
       )}
 
       {/* 错误状态 */}
       {error && !isLoading && (
-        <div
-          className="border px-4 py-3 rounded mb-4"
-          style={errorStyle}
-        >
-          <p className="font-bold">搜索出错</p>
-          <p>{error}</p>
+        <div className="error-state">
+          <div className="error-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="2"/>
+              <path d="M15 9L9 15M9 9L15 15" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+            </svg>
+          </div>
+          <h3 className="error-title">搜索出错</h3>
+          <p className="error-message">{error}</p>
         </div>
       )}
 
       {/* 无结果状态 */}
       {!isLoading && !error && results.length === 0 && (
-        <div
-          className="text-center py-12 rounded-lg"
-          style={noResultsStyle}
-        >
-          <p>
-            未找到匹配的结果，请尝试其他关键词
+        <div className="no-results-state">
+          <div className="no-results-icon">
+            <svg width="48" height="48" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+              <circle cx="11" cy="11" r="8" stroke="currentColor" strokeWidth="2"/>
+              <path d="M21 21L16.65 16.65" stroke="currentColor" strokeWidth="2" strokeLinecap="round"/>
+            </svg>
+          </div>
+          <h3 className="no-results-title">未找到匹配结果</h3>
+          <p className="no-results-message">
+            请尝试使用其他关键词或调整筛选条件
           </p>
         </div>
       )}
 
       {/* 结果列表 */}
       {!isLoading && !error && results.length > 0 && (
-        <div className="space-y-4">
+        <div className="results-grid">
           {results.map((result) => (
             <ResultItem key={result.id || `result-${Math.random()}`} result={result} />
           ))}

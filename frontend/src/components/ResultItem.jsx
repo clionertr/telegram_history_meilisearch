@@ -1,15 +1,15 @@
 import useTelegramSDK from '../hooks/useTelegramSDK';
 
 /**
- * 搜索结果项组件
- * 显示单条搜索结果，包括消息摘要、发送者、聊天标题、发送时间及原始消息链接
+ * 搜索结果项组件 - 阶段3重构版本
+ * 实现新的卡片式设计和现代化布局
  */
 function ResultItem({ result }) {
   // 确保result存在
   if (!result) return null;
 
   // 使用TMA SDK钩子
-  const { isAvailable, themeParams, triggerHapticFeedback } = useTelegramSDK();
+  const { triggerHapticFeedback } = useTelegramSDK();
 
   // 解构搜索结果数据
   const {
@@ -22,20 +22,55 @@ function ResultItem({ result }) {
   } = result;
 
   /**
-   * 将Unix时间戳转换为可读日期
+   * 将Unix时间戳转换为可读时间
    * @param {number} timestamp - Unix时间戳
-   * @returns {string} 格式化的日期字符串
+   * @returns {string} 格式化的时间字符串
    */
-  const formatDate = (timestamp) => {
+  const formatTime = (timestamp) => {
     if (!timestamp) return '未知时间';
     
     const date = new Date(timestamp * 1000);
-    return date.toLocaleString('zh-CN', {
+    const now = new Date();
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const messageDate = new Date(date.getFullYear(), date.getMonth(), date.getDate());
+    
+    // 如果是今天，只显示时间
+    if (messageDate.getTime() === today.getTime()) {
+      return date.toLocaleTimeString('zh-CN', {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
+      });
+    }
+    
+    // 如果是昨天
+    const yesterday = new Date(today);
+    yesterday.setDate(yesterday.getDate() - 1);
+    if (messageDate.getTime() === yesterday.getTime()) {
+      return '昨天 ' + date.toLocaleTimeString('zh-CN', {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
+      });
+    }
+    
+    // 如果是今年，显示月日和时间
+    if (date.getFullYear() === now.getFullYear()) {
+      return date.toLocaleDateString('zh-CN', {
+        month: '2-digit',
+        day: '2-digit'
+      }) + ' ' + date.toLocaleTimeString('zh-CN', {
+        hour: '2-digit',
+        minute: '2-digit',
+        hour12: false
+      });
+    }
+    
+    // 其他情况显示完整日期
+    return date.toLocaleDateString('zh-CN', {
       year: 'numeric',
       month: '2-digit',
-      day: '2-digit',
-      hour: '2-digit',
-      minute: '2-digit'
+      day: '2-digit'
     });
   };
 
@@ -47,88 +82,97 @@ function ResultItem({ result }) {
     triggerHapticFeedback('selection');
   };
 
+  /**
+   * 处理卡片点击
+   */
+  const handleCardClick = () => {
+    if (message_link) {
+      triggerHapticFeedback('light');
+      window.open(message_link, '_blank', 'noopener,noreferrer');
+    }
+  };
+
   // 生成消息ID用于标识（如果未提供ID）
   const messageId = id || `msg-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
 
-  // Telegram主题样式
-  const cardStyle = isAvailable && themeParams ? {
-    backgroundColor: themeParams.secondary_bg_color,
-    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)',
-  } : {};
+  // 生成头像占位符
+  const getAvatarPlaceholder = (name) => {
+    if (!name) return '?';
+    return name.charAt(0).toUpperCase();
+  };
 
-  const titleStyle = isAvailable && themeParams ? {
-    color: themeParams.text_color
-  } : {};
-
-  const subtitleStyle = isAvailable && themeParams ? {
-    color: themeParams.hint_color
-  } : {};
-
-  const contentStyle = isAvailable && themeParams ? {
-    color: themeParams.text_color
-  } : {};
-
-  // 高亮样式
-  const highlightStyles = `
-    .result-content em {
-      font-style: normal;
-      font-weight: bold;
-      ${isAvailable && themeParams
-        ? `background-color: ${themeParams.accent_color || 'rgba(59, 130, 246, 0.2)'};
-           color: ${themeParams.accent_text_color || themeParams.text_color};`
-        : 'background-color: rgba(59, 130, 246, 0.2);'
-      }
-      padding: 0 2px;
-      border-radius: 2px;
-    }
-  `;
-
-  const linkStyle = isAvailable && themeParams ? {
-    color: themeParams.link_color
-  } : {};
+  // 处理消息内容，确保安全显示
+  const getMessageContent = () => {
+    if (!text_snippet) return '无消息内容';
+    
+    // 简单的HTML标签清理，保留高亮标签
+    const cleanContent = text_snippet
+      .replace(/<(?!\/?(em|strong)\b)[^>]*>/gi, '') // 移除除了em和strong之外的HTML标签
+      .trim();
+    
+    return cleanContent || '无消息内容';
+  };
 
   return (
     <div
-      className="rounded-lg shadow-md p-4 mb-4 hover:shadow-lg transition-shadow"
-      style={cardStyle}
+      className="result-item"
       key={messageId}
+      onClick={handleCardClick}
+      role="button"
+      tabIndex={0}
+      onKeyDown={(e) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+          e.preventDefault();
+          handleCardClick();
+        }
+      }}
     >
-      {/* 高亮文本的样式 */}
-      <style>{highlightStyles}</style>
-      {/* 标题信息 */}
-      <div className="flex justify-between items-start mb-2">
-        <div>
-          <h3 className="font-semibold" style={titleStyle}>
-            {chat_title || '未知聊天'}
-          </h3>
-          <p className="text-sm" style={subtitleStyle}>
-            {sender_name || '未知发送者'} · {formatDate(date)}
-          </p>
+      <div className="result-header">
+        {/* 头像 */}
+        <div className="result-avatar">
+          {getAvatarPlaceholder(sender_name)}
+        </div>
+        
+        {/* 发送者信息和时间 */}
+        <div className="result-meta">
+          <div className="result-sender">
+            {sender_name || '未知发送者'}
+          </div>
+          <div className="result-time">
+            {formatTime(date)}
+          </div>
         </div>
       </div>
 
-      {/* 消息内容 - 使用dangerouslySetInnerHTML渲染HTML标签 */}
-      <p
-        className="mb-3 whitespace-pre-line result-content"
-        style={contentStyle}
-        dangerouslySetInnerHTML={{
-          __html: text_snippet || '无消息内容'
-        }}
-      />
+      {/* 消息内容 */}
+      <div className="result-content">
+        <div
+          className="result-text"
+          dangerouslySetInnerHTML={{
+            __html: getMessageContent()
+          }}
+        />
+        
+        {/* 聊天标题 */}
+        {chat_title && (
+          <div className="result-chat">
+            来自: {chat_title}
+          </div>
+        )}
+      </div>
 
-      {/* 消息链接 */}
+      {/* 链接指示器 */}
       {message_link && (
-        <div className="text-right">
-          <a
-            href={message_link}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-sm font-medium hover:opacity-80"
-            style={linkStyle}
-            onClick={handleLinkClick}
-          >
-            查看原始消息 →
-          </a>
+        <div className="result-link-indicator">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+            <path
+              d="M7 17L17 7M17 7H7M17 7V17"
+              stroke="currentColor"
+              strokeWidth="2"
+              strokeLinecap="round"
+              strokeLinejoin="round"
+            />
+          </svg>
         </div>
       )}
     </div>
