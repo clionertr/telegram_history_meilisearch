@@ -1,14 +1,16 @@
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import useTelegramSDK from '../hooks/useTelegramSDK';
 import useNavStore from '../store/navStore';
 import useSettingsStore from '../store/settingsStore';
 import SettingsCard from '../components/settings/SettingsCard';
-import { 
-  SettingsNavigationItem, 
-  SettingsToggleItem, 
+import {
+  SettingsNavigationItem,
+  SettingsToggleItem,
   SettingsSelectItem,
-  SettingsInfoItem 
+  SettingsInfoItem
 } from '../components/settings/SettingsItems';
+import WhitelistManagement from '../components/settings/WhitelistManagement';
+import { ToastManager } from '../components/common/Toast';
 
 /**
  * 设置页面组件
@@ -17,6 +19,10 @@ import {
 function SettingsPage() {
   const { isAvailable, themeParams } = useTelegramSDK();
   const { setActiveNav } = useNavStore();
+  
+  // 本地状态管理
+  const [isWhitelistOpen, setIsWhitelistOpen] = useState(false);
+  const [toasts, setToasts] = useState([]);
   
   // 从设置store中获取状态和方法
   const {
@@ -75,24 +81,35 @@ function SettingsPage() {
     { value: 'all', label: '全部历史' }
   ];
   
+  // Toast 管理函数
+  const addToast = (message, type = 'success', duration = 3000) => {
+    const id = Date.now() + Math.random();
+    const newToast = { id, message, type, duration };
+    setToasts(prev => [...prev, newToast]);
+  };
+
+  const removeToast = (id) => {
+    setToasts(prev => prev.filter(toast => toast.id !== id));
+  };
+
   // 处理清除缓存事件
   const handleClearCache = async () => {
-    // 这里应该添加确认对话框
-    // 简化版先直接调用清除方法
     try {
       const result = await clearCache();
       if (result.success) {
-        alert(result.message); // 临时使用alert，后期可改为更友好的提示
+        addToast(result.message, 'success');
+      } else {
+        addToast('清除缓存失败', 'error');
       }
     } catch (error) {
       console.error('清除缓存失败:', error);
+      addToast('清除缓存失败', 'error');
     }
   };
   
   // 处理白名单管理导航
   const handleNavigateToWhitelist = () => {
-    // TODO: 实现白名单管理页面的导航
-    alert('白名单管理功能尚未实现');
+    setIsWhitelistOpen(true);
   };
   
   return (
@@ -155,7 +172,7 @@ function SettingsPage() {
           <SettingsNavigationItem
             icon="🛡️"
             label="白名单管理"
-            description="管理允许访问的IP或域名"
+            description="管理需要同步消息的聊天（用户/群组/频道）"
             onNavigate={handleNavigateToWhitelist}
           />
         </SettingsCard>
@@ -169,6 +186,19 @@ function SettingsPage() {
           />
         </SettingsCard>
       </div>
+
+      {/* 白名单管理模态框 */}
+      <WhitelistManagement
+        isOpen={isWhitelistOpen}
+        onClose={() => setIsWhitelistOpen(false)}
+        onToast={addToast}
+      />
+
+      {/* Toast 通知管理器 */}
+      <ToastManager
+        toasts={toasts}
+        removeToast={removeToast}
+      />
     </div>
   );
 }

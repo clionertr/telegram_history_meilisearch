@@ -44,6 +44,95 @@ export const searchMessages = async (query, filters = {}, page = 1, hitsPerPage 
   }
 };
 
+/**
+ * 白名单API - 获取白名单列表
+ * @returns {Promise} - 白名单数据Promise
+ */
+export const getWhitelist = async () => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/v1/admin/whitelist`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(
+        errorData.detail || `获取白名单失败 (${response.status}: ${response.statusText})`
+      );
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error('获取白名单API调用失败:', error);
+    throw error;
+  }
+};
+
+/**
+ * 白名单API - 添加到白名单
+ * @param {number} chatId - 要添加的聊天ID
+ * @returns {Promise} - 操作结果Promise
+ */
+export const addToWhitelist = async (chatId) => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/v1/admin/whitelist`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        chat_id: chatId
+      }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(
+        errorData.detail || `添加到白名单失败 (${response.status}: ${response.statusText})`
+      );
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error('添加到白名单API调用失败:', error);
+    throw error;
+  }
+};
+
+/**
+ * 白名单API - 从白名单移除
+ * @param {number} chatId - 要移除的聊天ID
+ * @returns {Promise} - 操作结果Promise
+ */
+export const removeFromWhitelist = async (chatId) => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/v1/admin/whitelist/${chatId}`, {
+      method: 'DELETE',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(
+        errorData.detail || `从白名单移除失败 (${response.status}: ${response.statusText})`
+      );
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error('从白名单移除API调用失败:', error);
+    throw error;
+  }
+};
+
 export default {
-  searchMessages
+  searchMessages,
+  getWhitelist,
+  addToWhitelist,
+  removeFromWhitelist
 };

@@ -2,6 +2,7 @@
  * 设置状态管理 - 使用Zustand管理设置状态
  */
 import { create } from 'zustand';
+import { getWhitelist, addToWhitelist, removeFromWhitelist } from '../services/api';
 
 /**
  * 设置状态存储
@@ -146,24 +147,75 @@ const useSettingsStore = create((set) => ({
   
   /**
    * 加载白名单
-   * 实际操作需要与API交互，这里只提供状态更新
+   * 从后端API获取白名单数据
    */
   loadWhitelist: async () => {
-    // TODO: 实现与后端API的白名单加载交互
-    // 临时实现，返回模拟数据
-    const mockData = [
-      { id: 1, value: 'example.com' },
-      { id: 2, value: '192.168.1.1' },
-    ];
-    
-    set({
-      whitelist: {
-        items: mockData,
-        isLoaded: true
+    try {
+      const response = await getWhitelist();
+      const items = response.whitelist || [];
+      
+      set({
+        whitelist: {
+          items: items,
+          isLoaded: true
+        }
+      });
+      
+      return items;
+    } catch (error) {
+      console.error('加载白名单失败:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * 添加到白名单
+   * @param {number} chatId - 要添加的聊天ID
+   */
+  addToWhitelistAction: async (chatId) => {
+    try {
+      const response = await addToWhitelist(chatId);
+      
+      // 如果添加成功，更新本地状态
+      if (response.success) {
+        set((state) => ({
+          whitelist: {
+            ...state.whitelist,
+            items: [...state.whitelist.items, chatId]
+          }
+        }));
       }
-    });
-    
-    return mockData;
+      
+      return response;
+    } catch (error) {
+      console.error('添加到白名单失败:', error);
+      throw error;
+    }
+  },
+
+  /**
+   * 从白名单移除
+   * @param {number} chatId - 要移除的聊天ID
+   */
+  removeFromWhitelistAction: async (chatId) => {
+    try {
+      const response = await removeFromWhitelist(chatId);
+      
+      // 如果移除成功，更新本地状态
+      if (response.success) {
+        set((state) => ({
+          whitelist: {
+            ...state.whitelist,
+            items: state.whitelist.items.filter(item => item !== chatId)
+          }
+        }));
+      }
+      
+      return response;
+    } catch (error) {
+      console.error('从白名单移除失败:', error);
+      throw error;
+    }
   },
 }));
 
