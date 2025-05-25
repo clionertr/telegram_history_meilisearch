@@ -67,7 +67,7 @@
   width: 100%;
   padding: var(--spacing-xl) var(--spacing-lg);
   padding-top: calc(var(--spacing-xl) + env(safe-area-inset-top)); /* 为安全区域留空间 */
-  padding-bottom: calc(80px + var(--spacing-xl) + env(safe-area-inset-bottom)); /* 为底部导航栏留空间 */
+  padding-bottom: calc(70px + var(--spacing-2xl) + env(safe-area-inset-bottom)); /* 为悬浮底部导航栏留空间 */
   min-height: 0; /* 允许内容区域收缩 */
   box-sizing: border-box;
 }
@@ -214,6 +214,15 @@
   }
   to {
     transform: rotate(360deg);
+  }
+}
+
+@keyframes float {
+  0%, 100% {
+    transform: translateX(-50%) translateY(0px);
+  }
+  50% {
+    transform: translateX(-50%) translateY(-2px);
   }
 }
 
@@ -763,18 +772,26 @@
 /* BottomNavBar 组件样式 */
 .bottom-nav {
   position: fixed;
-  bottom: 0;
-  left: 0;
-  right: 0;
+  bottom: var(--spacing-lg);
+  left: 50%;
+  transform: translateX(-50%);
   background-color: var(--color-bg-secondary);
-  border-top: 1px solid var(--color-border);
-  box-shadow: var(--shadow-nav);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-lg);
+  box-shadow: var(--shadow-lg);
+  backdrop-filter: blur(10px);
   display: flex;
   justify-content: space-around;
   align-items: center;
-  height: 80px;
-  padding-bottom: env(safe-area-inset-bottom);
+  height: 70px;
+  max-height: 80px;
+  max-width: 400px;
+  width: calc(100% - var(--spacing-2xl));
+  padding: var(--spacing-sm) var(--spacing-md);
+  padding-bottom: calc(var(--spacing-sm) + env(safe-area-inset-bottom));
   z-index: 50;
+  transition: all 0.3s ease;
+  animation: float 6s ease-in-out infinite;
 }
 
 .nav-item {
@@ -791,19 +808,34 @@
   color: var(--color-text-secondary);
   min-width: 60px;
   min-height: 60px;
-  border-radius: var(--radius-sm);
+  border-radius: var(--radius-md);
+  position: relative;
 }
 
 .nav-item:hover {
   background-color: var(--color-input-bg);
+  transform: translateY(-2px);
 }
 
 .nav-item:active {
-  transform: scale(0.95);
+  transform: translateY(0) scale(0.95);
 }
 
 .nav-item-active {
   color: var(--color-accent);
+  background-color: rgba(245, 158, 11, 0.1);
+}
+
+.nav-item-active::before {
+  content: '';
+  position: absolute;
+  top: -2px;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 20px;
+  height: 3px;
+  background-color: var(--color-accent);
+  border-radius: 2px;
 }
 
 .nav-icon {
@@ -825,7 +857,7 @@
   .app-main {
     padding: var(--spacing-md) var(--spacing-sm);
     padding-top: calc(var(--spacing-md) + env(safe-area-inset-top));
-    padding-bottom: calc(70px + var(--spacing-md) + env(safe-area-inset-bottom));
+    padding-bottom: calc(60px + var(--spacing-xl) + env(safe-area-inset-bottom));
   }
 
   .search-form {
@@ -888,6 +920,8 @@
 
   .bottom-nav {
     height: 60px;
+    max-width: 320px;
+    width: calc(100% - var(--spacing-lg));
   }
 
   .nav-item {
@@ -911,7 +945,7 @@
   .app-main {
     padding: var(--spacing-lg) var(--spacing-md);
     padding-top: calc(var(--spacing-lg) + env(safe-area-inset-top));
-    padding-bottom: calc(80px + var(--spacing-lg) + env(safe-area-inset-bottom));
+    padding-bottom: calc(70px + var(--spacing-2xl) + env(safe-area-inset-bottom));
   }
 
   .search-form {
@@ -995,6 +1029,7 @@
 
   .bottom-nav {
     height: 70px;
+    max-width: 360px;
   }
 
   .nav-item {
@@ -1014,7 +1049,7 @@
   .app-main {
     padding: var(--spacing-2xl) var(--spacing-xl);
     padding-top: calc(var(--spacing-2xl) + env(safe-area-inset-top));
-    padding-bottom: calc(80px + var(--spacing-2xl) + env(safe-area-inset-bottom));
+    padding-bottom: calc(70px + var(--spacing-3xl) + env(safe-area-inset-bottom));
   }
 
   .search-form {
@@ -1059,7 +1094,7 @@
   .app-main {
     padding: var(--spacing-3xl) var(--spacing-2xl);
     padding-top: calc(var(--spacing-3xl) + env(safe-area-inset-top));
-    padding-bottom: calc(90px + var(--spacing-3xl) + env(safe-area-inset-bottom));
+    padding-bottom: calc(70px + var(--spacing-3xl) + env(safe-area-inset-bottom));
   }
 
   .search-bar-container {
@@ -1102,7 +1137,8 @@
   }
 
   .bottom-nav {
-    height: 90px;
+    height: 80px;
+    max-width: 450px;
   }
 
   .nav-item {
@@ -1186,7 +1222,8 @@
 
   .nav-item:hover {
     background-color: var(--color-input-bg);
-    transform: translateY(-1px);
+    transform: translateY(-3px);
+    box-shadow: var(--shadow-md);
   }
 }
 
@@ -1195,6 +1232,7 @@
   .app-main {
     padding: var(--spacing-3xl) var(--spacing-3xl);
     padding-top: calc(var(--spacing-3xl) + env(safe-area-inset-top));
+    padding-bottom: calc(70px + var(--spacing-3xl) + env(safe-area-inset-bottom));
   }
 
   .search-bar-container {
@@ -1235,7 +1273,13 @@
   }
 
   .bottom-nav {
-    border-top-color: var(--color-border);
+    border-color: var(--color-border);
+    background-color: rgba(45, 45, 45, 0.9);
+    backdrop-filter: blur(15px);
+  }
+
+  .nav-item-active {
+    background-color: rgba(245, 158, 11, 0.2);
   }
 
   .chat-type-checkbox:checked + .chat-type-content {
@@ -1256,8 +1300,10 @@
   .nav-item,
   .filter-header,
   .filter-expand-icon,
-  .pagination-btn {
+  .pagination-btn,
+  .bottom-nav {
     transition: none;
+    animation: none;
   }
   
   .animate-spin {
