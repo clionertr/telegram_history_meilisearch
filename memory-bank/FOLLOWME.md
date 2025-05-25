@@ -68,7 +68,8 @@
                     *   引入了 Zustand 存储，用于管理导航和设置状态。
                     *   实现 SettingsCard 和 SettingsItems 组件，用于结构化设置显示。
                     *   增强了界面，支持 Telegram 主题，以实现一致的样式。
-                    *   添加了主题选择、同步频率和缓存管理功能。
+                    *   添加了主题选择、同步频率和缓存管理功能（后续已扩展为综合缓存清除，包括多种缓存类型和后端API支持）。
+                    *   实现了完整的白名单管理界面，可查看、添加、移除白名单聊天，并与后端API对接。
                 *   **`eeb0961`: feat: 重构应用界面，实施阶段3设计方案**
                     *   更新 App.css，添加新的样式规则以支持卡片式设计和现代化布局。
                     *   修改 App.jsx，重构应用结构，优化页面标题获取逻辑。
@@ -410,6 +411,11 @@ frontend/
     *   `GET /api/v1/admin/whitelist`
     *   `POST /api/v1/admin/whitelist` (Body: `{"chat_id": 123456789}`)
     *   `DELETE /api/v1/admin/whitelist/{chat_id}`
+    *   `DELETE /api/v1/admin/whitelist` (重置白名单)
+*   **Cache Management API (Admin only, for Mini App/Web UI to manage various cache types)**
+    *   `GET /api/v1/admin/cache/types` (获取可清除的缓存类型及描述)
+    *   `POST /api/v1/admin/cache/clear` (Body: `{"cache_types": ["type1", "type2"]}`)
+    *   `POST /api/v1/admin/cache/clear/all`
 
 ## 5. 测试与调试
 

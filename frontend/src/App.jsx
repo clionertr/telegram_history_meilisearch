@@ -20,8 +20,8 @@ function App() {
     getThemeCssVars
   } = useTelegramSDK();
   
-  // 获取当前选中的导航项
-  const { activeNav } = useNavStore();
+  // 获取当前选中的导航项和底部导航栏显示状态
+  const { activeNav, isBottomNavVisible } = useNavStore();
 
   // 将Telegram主题应用到整个应用
   useEffect(() => {
@@ -86,8 +86,8 @@ function App() {
         {renderPage()}
       </main>
       
-      {/* 底部导航栏 */}
-      <BottomNavBar />
+      {/* 底部导航栏 - 根据状态控制显示/隐藏 */}
+      {isBottomNavVisible && <BottomNavBar />}
     </div>
   );
 }

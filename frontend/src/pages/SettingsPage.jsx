@@ -10,6 +10,7 @@ import {
   SettingsInfoItem
 } from '../components/settings/SettingsItems';
 import WhitelistManagement from '../components/settings/WhitelistManagement';
+import CacheManagement from '../components/settings/CacheManagement';
 import { ToastManager } from '../components/common/Toast';
 
 /**
@@ -22,6 +23,7 @@ function SettingsPage() {
   
   // 本地状态管理
   const [isWhitelistOpen, setIsWhitelistOpen] = useState(false);
+  const [isCacheOpen, setIsCacheOpen] = useState(false);
   const [toasts, setToasts] = useState([]);
   
   // 从设置store中获取状态和方法
@@ -92,19 +94,9 @@ function SettingsPage() {
     setToasts(prev => prev.filter(toast => toast.id !== id));
   };
 
-  // 处理清除缓存事件
-  const handleClearCache = async () => {
-    try {
-      const result = await clearCache();
-      if (result.success) {
-        addToast(result.message, 'success');
-      } else {
-        addToast('清除缓存失败', 'error');
-      }
-    } catch (error) {
-      console.error('清除缓存失败:', error);
-      addToast('清除缓存失败', 'error');
-    }
+  // 处理清除缓存事件 - 打开缓存管理界面
+  const handleClearCache = () => {
+    setIsCacheOpen(true);
   };
   
   // 处理白名单管理导航
@@ -191,6 +183,13 @@ function SettingsPage() {
       <WhitelistManagement
         isOpen={isWhitelistOpen}
         onClose={() => setIsWhitelistOpen(false)}
+        onToast={addToast}
+      />
+
+      {/* 缓存管理模态框 */}
+      <CacheManagement
+        isOpen={isCacheOpen}
+        onClose={() => setIsCacheOpen(false)}
         onToast={addToast}
       />
 

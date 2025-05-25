@@ -607,3 +607,24 @@
     *   修复了最初实现时误用 `edit_bot_commands` 的 API 调用问题。
     *   现在，当 SearchBot 启动时，会自动将其支持的命令列表发送给 BotFather，用户在与 Bot 对话时可以看到命令提示、自动完成和命令描述。
 *   **详细日志:** 详细的实现步骤、代码分析、API 调用修复过程已记录在 [`memory-bank/activeContext.md`](memory-bank/activeContext.md:0) (版本：SearchBot 快捷命令列表设置功能实现)。
+---
+### 任务: 完善前端设置页面功能 (已完成)
+*   **完成时间:** 2025/5/25 下午9:01 (大致时间，基于子任务报告)
+*   **执行者:** 💻 Code Mode
+*   **主要成果:**
+    *   **白名单管理功能:**
+        *   在 [`frontend/src/pages/SettingsPage.jsx`](frontend/src/pages/SettingsPage.jsx:0) 中修正了白名单管理的描述文本。
+        *   创建了新的模态框组件 [`frontend/src/components/settings/WhitelistManagement.jsx`](frontend/src/components/settings/WhitelistManagement.jsx:0) 用于显示、添加和移除白名单聊天。
+        *   该功能已与后端白名单 API ([`api/routers/whitelist.py`](api/routers/whitelist.py:0)) 完全对接。
+        *   更新了 [`frontend/src/store/settingsStore.js`](frontend/src/store/settingsStore.js:0) 和 [`frontend/src/services/api.js`](frontend/src/services/api.js:0) 以支持白名单操作。
+    *   **缓存管理功能 (扩展):**
+        *   创建了新的模态框组件 [`frontend/src/components/settings/CacheManagement.jsx`](frontend/src/components/settings/CacheManagement.jsx:0) 提供多种缓存清除选项。
+        *   **新增了后端 API** [`api/routers/cache.py`](api/routers/cache.py:0) (及在 [`api/main.py`](api/main.py:0) 中注册)，支持清除搜索索引、前端状态、用户偏好和同步缓存等。
+        *   [`frontend/src/pages/SettingsPage.jsx`](frontend/src/pages/SettingsPage.jsx:0) 中的“清除缓存”功能已更新为打开此缓存管理界面。
+        *   更新了 [`frontend/src/store/settingsStore.js`](frontend/src/store/settingsStore.js:0) 和 [`frontend/src/services/api.js`](frontend/src/services/api.js:0) 以支持新的缓存管理操作。
+    *   **用户体验改进:**
+        *   创建并集成了通用的 Toast 通知组件 ([`frontend/src/components/common/Toast.jsx`](frontend/src/components/common/Toast.jsx:0))，替换了原有的 `alert()`。
+    *   **后端对接情况梳理 (记录在 `memory-bank/activeContext.md`):**
+        *   **已完全对接:** 白名单管理、缓存管理 (通过新API)。
+        *   **前端UI存在，但后端行为待集成:** 自动同步频率、历史数据范围、通知设置。这些前端选项目前不影响 User Bot 的实际行为。
+*   **详细日志:** 详细的实现过程、设计决策、代码实现、API 设计以及对现有设置项后端对接情况的分析已记录在 [`memory-bank/activeContext.md`](memory-bank/activeContext.md:0) (版本：前端设置页面完善 - 白名单管理和用户体验改进)。

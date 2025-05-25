@@ -13,6 +13,9 @@ const useNavStore = create((set) => ({
   // 记录上次的导航状态，用于恢复
   prevActiveNav: null,
   
+  // 底部导航栏显示状态
+  isBottomNavVisible: true,
+  
   // Actions
   
   /**
@@ -31,7 +34,23 @@ const useNavStore = create((set) => ({
   restorePrevNav: () => set((state) => ({
     activeNav: state.prevActiveNav || 'search',
     prevActiveNav: null
-  }))
+  })),
+  
+  /**
+   * 设置底部导航栏的显示状态
+   * @param {boolean} visible - 是否显示底部导航栏
+   */
+  setBottomNavVisible: (visible) => set({ isBottomNavVisible: visible }),
+  
+  /**
+   * 隐藏底部导航栏
+   */
+  hideBottomNav: () => set({ isBottomNavVisible: false }),
+  
+  /**
+   * 显示底部导航栏
+   */
+  showBottomNav: () => set({ isBottomNavVisible: true })
 }));
 
 export default useNavStore;

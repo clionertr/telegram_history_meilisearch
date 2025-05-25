@@ -12,7 +12,7 @@ import logging
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
-from api.routers import search, whitelist
+from api.routers import search, whitelist, cache
 
 
 def create_app() -> FastAPI:
@@ -55,6 +55,7 @@ def create_app() -> FastAPI:
     # 注册路由器
     app.include_router(search.router, prefix="/api/v1")
     app.include_router(whitelist.router, prefix="/api/v1")
+    app.include_router(cache.router, prefix="/api/v1")
     
     # 注册启动事件
     @app.on_event("startup")

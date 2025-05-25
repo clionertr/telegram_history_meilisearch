@@ -130,9 +130,97 @@ export const removeFromWhitelist = async (chatId) => {
   }
 };
 
+/**
+ * 缓存API - 获取可清除的缓存类型
+ * @returns {Promise} - 缓存类型数据Promise
+ */
+export const getCacheTypes = async () => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/v1/admin/cache/types`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(
+        errorData.detail || `获取缓存类型失败 (${response.status}: ${response.statusText})`
+      );
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error('获取缓存类型API调用失败:', error);
+    throw error;
+  }
+};
+
+/**
+ * 缓存API - 清除指定类型的缓存
+ * @param {Array} cacheTypes - 要清除的缓存类型数组
+ * @returns {Promise} - 操作结果Promise
+ */
+export const clearCacheTypes = async (cacheTypes) => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/v1/admin/cache/clear`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({
+        cache_types: cacheTypes
+      }),
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(
+        errorData.detail || `清除缓存失败 (${response.status}: ${response.statusText})`
+      );
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error('清除缓存API调用失败:', error);
+    throw error;
+  }
+};
+
+/**
+ * 缓存API - 清除所有缓存
+ * @returns {Promise} - 操作结果Promise
+ */
+export const clearAllCache = async () => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/v1/admin/cache/clear/all`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(
+        errorData.detail || `清除所有缓存失败 (${response.status}: ${response.statusText})`
+      );
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error('清除所有缓存API调用失败:', error);
+    throw error;
+  }
+};
+
 export default {
   searchMessages,
   getWhitelist,
   addToWhitelist,
-  removeFromWhitelist
+  removeFromWhitelist,
+  getCacheTypes,
+  clearCacheTypes,
+  clearAllCache
 };
