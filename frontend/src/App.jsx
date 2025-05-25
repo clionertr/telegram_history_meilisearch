@@ -69,40 +69,20 @@ function App() {
     }
   };
 
-  // 获取页面标题
-  const getPageTitle = () => {
-    switch (activeNav) {
-      case 'search':
-        return 'Telegram 中文历史消息搜索';
-      case 'groups':
-        return '群组';
-      case 'settings':
-        return '设置';
-      default:
-        return 'Telegram 中文历史消息搜索';
-    }
-  };
-
   return (
     <div className="app-container">
-      {/* 头部导航栏 */}
-      <header className="app-header">
-        <div className="header-content">
-          <h1 className="page-title">{getPageTitle()}</h1>
-          {/* 用户信息显示区域 - 仅在Telegram环境中显示 */}
-          {isAvailable && userInfo && (
-            <div className="user-info">
-              <span className="user-name">
-                {getUserDisplayName()}
-                {userInfo.username ? ` (@${userInfo.username})` : ''}
-              </span>
-            </div>
-          )}
-        </div>
-      </header>
-      
       {/* 主内容区域 */}
       <main className="app-main">
+        {/* 用户信息显示区域 - 仅在Telegram环境中显示 */}
+        {isAvailable && userInfo && (
+          <div className="user-info-banner">
+            <span className="user-name">
+              欢迎，{getUserDisplayName()}
+              {userInfo.username ? ` (@${userInfo.username})` : ''}
+            </span>
+          </div>
+        )}
+        
         {renderPage()}
       </main>
       
