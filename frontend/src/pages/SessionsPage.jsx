@@ -90,15 +90,36 @@ function SessionsPage() {
       {!isLoading && !error && sessions.length > 0 && (
         <div className="space-y-4">
           {sessions.map((session) => (
-            <SettingsCard key={session.id} title={session.name || '未知会话'}>
+            <SettingsCard
+              key={session.id}
+              title={
+                <div className="flex items-center">
+                  {session.avatar_base64 ? (
+                    <img
+                      src={session.avatar_base64}
+                      alt={`${session.name || '会话'}头像`}
+                      className="w-10 h-10 rounded-full mr-3 object-cover"
+                    />
+                  ) : (
+                    <span className="w-10 h-10 rounded-full bg-gray-300 flex items-center justify-center text-gray-600 text-xl font-medium mr-3">
+                      {session.name ? session.name.charAt(0).toUpperCase() : 'S'}
+                    </span>
+                  )}
+                  <span style={textStyle}>{session.name || '未知会话'}</span>
+                </div>
+              }
+            >
               <div className="p-4">
-                <p className="text-sm" style={hintStyle}>
+                <p className="text-sm mb-1" style={hintStyle}>
                   ID: {session.id}
                 </p>
                 <p className="text-sm font-medium" style={textStyle}>
                   类型: {getSessionTypeDisplay(session.type)}
                 </p>
-                {/* 后续添加头像和白名单按钮 */}
+                <p className="text-xs mt-1" style={hintStyle}>
+                  未读: {session.unread_count || 0}
+                </p>
+                {/* 后续添加白名单按钮 */}
               </div>
             </SettingsCard>
           ))}

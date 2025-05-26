@@ -11,6 +11,7 @@ import os
 import logging
 import functools
 import asyncio
+import base64
 from typing import Optional
 from pathlib import Path
 from telethon import TelegramClient, events
@@ -257,6 +258,7 @@ class UserBotClient:
                         - type (str): 对话类型 ('user', 'group', 'channel')
                         - unread_count (int): 未读消息数
                         - date (float, optional): 最后一条消息的Unix时间戳
+                        - avatar_base64 (str, optional): 头像的Base64编码字符串 (data URI)
             
         Raises:
             RuntimeError: 如果客户端未初始化或未连接。
@@ -301,19 +303,29 @@ class UserBotClient:
                 dialog_name = dialog.name or "未知对话"
                 dialog_id = dialog.id
                 dialog_type_str = "unknown"
+                avatar_base64 = None
 
                 if dialog.is_user:
                     dialog_type_str = "user"
                 elif dialog.is_group: # 包括普通群组和超级群组
                     dialog_type_str = "group"
                 elif dialog.is_channel:
-                    # Telethon 的 is_group 已经能区分普通群组和超级群组（都算group）
-                    # is_channel 通常指广播频道
-                    # 进一步确认，如果 entity 是 Channel 且 megagroup 为 True，它实际上是超级群组
                     if hasattr(dialog.entity, 'megagroup') and dialog.entity.megagroup:
                          dialog_type_str = "group" # 超级群组也视为 group
                     else:
                          dialog_type_str = "channel" # 广播频道
+                
+                # 尝试获取头像
+                try:
+                    if dialog.entity: # 确保 entity 存在
+                        photo_bytes = await self._client.download_profile_photo(dialog.entity, file=bytes)
+                        if photo_bytes:
+                            # 假设头像是JPEG格式，实际可能需要更复杂的类型检测或固定为一种格式
+                            base64_string = base64.b64encode(photo_bytes).decode('utf-8')
+                            avatar_base64 = f"data:image/jpeg;base64,{base64_string}"
+                except Exception as e:
+                    logger.warning(f"无法下载对话 {dialog_id} ({dialog_name}) 的头像: {e}")
+                    avatar_base64 = None # 出错则不设置头像
                 
                 dialogs_info.append({
                     "id": dialog_id,
@@ -321,9 +333,10 @@ class UserBotClient:
                     "type": dialog_type_str,
                     "unread_count": dialog.unread_count if hasattr(dialog, 'unread_count') else 0,
                     "date": dialog.date.timestamp() if dialog.date else None,
+                    "avatar_base64": avatar_base64,
                 })
                 
-            logger.info(f"成功获取 {len(dialogs_info)} 个对话信息 (第 {page} 页, 每页 {limit} 条，总对话数 {len(all_dialogs)})")
+            logger.info(f"成功获取 {len(dialogs_info)} 个对话信息 (第 {page} 页, 每页 {limit} 条，总对话数 {len(all_dialogs)})，包含头像尝试")
             # logger.debug(f"当前页对话列表: {dialogs_info}") # 避免日志过长
             
             return dialogs_info
