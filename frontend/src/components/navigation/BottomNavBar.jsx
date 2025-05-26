@@ -27,8 +27,8 @@ function BottomNavBar() {
       ),
       label: '搜索',
     },
-    { 
-      id: 'groups',
+    {
+      id: 'sessions',
       icon: (
         <svg width="24" height="24" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
           <path
@@ -40,7 +40,7 @@ function BottomNavBar() {
           />
         </svg>
       ),
-      label: '群组',
+      label: '会话',
     },
     { 
       id: 'settings',

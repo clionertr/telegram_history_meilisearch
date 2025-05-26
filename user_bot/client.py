@@ -239,19 +239,29 @@ class UserBotClient:
             
         return self._client
 
-    async def get_dialogs_info(self) -> list[tuple[str, int, str]]:
+    async def get_dialogs_info(self, page: int = 1, limit: int = 20) -> list[dict]:
         """
-        获取用户账户下的所有对话信息
+        获取用户账户下的所有对话信息，支持分页。
         
         使用Telethon客户端的get_dialogs()功能获取所有对话，
-        并提取每个对话的名称、ID和类型。
+        然后根据分页参数提取指定范围的对话，并返回包含对话详细信息的字典列表。
         
+        Args:
+            page (int): 页码，从1开始。
+            limit (int): 每页显示的对话数量。
+            
         Returns:
-            list[tuple[str, int, str]]: 包含(dialog_name, dialog_id, dialog_type)元组的列表
+            list[dict]: 包含对话信息的字典列表，每个字典包含:
+                        - id (int): 对话ID
+                        - name (str): 对话名称/标题
+                        - type (str): 对话类型 ('user', 'group', 'channel')
+                        - unread_count (int): 未读消息数
+                        - date (float, optional): 最后一条消息的Unix时间戳
             
         Raises:
-            RuntimeError: 如果客户端未初始化或未连接
-            Exception: 如果获取对话信息时发生API错误
+            RuntimeError: 如果客户端未初始化或未连接。
+            ValueError: 如果page或limit参数无效。
+            Exception: 如果获取对话信息时发生API错误。
         """
         if not self._client:
             logger.error("客户端未初始化，无法获取对话信息")
@@ -260,39 +270,70 @@ class UserBotClient:
         if not self._client.is_connected():
             logger.error("客户端未连接，无法获取对话信息")
             raise RuntimeError("客户端未连接，请先调用start()方法")
+
+        if page < 1:
+            raise ValueError("页码 (page) 必须大于等于 1")
+        if limit < 1:
+            raise ValueError("每页数量 (limit) 必须大于等于 1")
             
         try:
-            logger.info("开始获取对话列表...")
+            logger.info(f"开始获取对话列表 (分页: page={page}, limit={limit})...")
             
-            # 使用Telethon的get_dialogs()方法获取所有对话
-            dialogs = await self._client.get_dialogs()
+            # Telethon 的 get_dialogs() 不直接支持 offset 来跳过一定数量的对话。
+            # 它有一个 `offset_id` 和 `offset_date` 参数，但这些用于从特定点开始获取。
+            # 为了实现简单的页码分页，我们可以获取所有对话，然后在Python中进行切片。
+            # 注意：如果对话数量非常大 (例如几千个)，这可能不是最高效的方法，
+            # 因为它会先加载所有对话到内存中。
+            # 对于非常大的列表，更高级的分页可能需要使用 offset_id/offset_date，
+            # 但这会使页码逻辑复杂化。目前采用内存分页。
             
-            # 提取对话名称、ID和类型
+            all_dialogs = await self._client.get_dialogs() # 获取所有对话
+            
+            # 计算分页的起始和结束索引
+            start_index = (page - 1) * limit
+            end_index = start_index + limit
+            
+            # 获取当前页的对话
+            paginated_dialogs = all_dialogs[start_index:end_index]
+            
             dialogs_info = []
-            for dialog in dialogs:
+            for dialog in paginated_dialogs:
                 dialog_name = dialog.name or "未知对话"
                 dialog_id = dialog.id
-                dialog_type_str = "unknown" # 默认为unknown
+                dialog_type_str = "unknown"
 
                 if dialog.is_user:
                     dialog_type_str = "user"
-                elif dialog.is_group: # 普通群组
+                elif dialog.is_group: # 包括普通群组和超级群组
                     dialog_type_str = "group"
                 elif dialog.is_channel:
-                    if hasattr(dialog.entity, 'megagroup') and dialog.entity.megagroup: # 超级群组
-                        dialog_type_str = "group"
-                    else: # 广播频道
-                        dialog_type_str = "channel"
+                    # Telethon 的 is_group 已经能区分普通群组和超级群组（都算group）
+                    # is_channel 通常指广播频道
+                    # 进一步确认，如果 entity 是 Channel 且 megagroup 为 True，它实际上是超级群组
+                    if hasattr(dialog.entity, 'megagroup') and dialog.entity.megagroup:
+                         dialog_type_str = "group" # 超级群组也视为 group
+                    else:
+                         dialog_type_str = "channel" # 广播频道
                 
-                dialogs_info.append((dialog_name, dialog_id, dialog_type_str))
+                dialogs_info.append({
+                    "id": dialog_id,
+                    "name": dialog_name,
+                    "type": dialog_type_str,
+                    "unread_count": dialog.unread_count if hasattr(dialog, 'unread_count') else 0,
+                    "date": dialog.date.timestamp() if dialog.date else None,
+                })
                 
-            logger.info(f"成功获取 {len(dialogs_info)} 个对话信息（包含类型）")
-            logger.debug(f"对话列表: {dialogs_info}")
+            logger.info(f"成功获取 {len(dialogs_info)} 个对话信息 (第 {page} 页, 每页 {limit} 条，总对话数 {len(all_dialogs)})")
+            # logger.debug(f"当前页对话列表: {dialogs_info}") # 避免日志过长
             
             return dialogs_info
             
+        except ValueError as ve:
+            logger.error(f"分页参数错误: {str(ve)}")
+            raise
         except Exception as e:
             logger.error(f"获取对话信息时发生错误: {str(e)}")
+            # 可以在这里添加更具体的错误处理，例如网络错误、API限制等
             raise Exception(f"获取对话信息失败: {str(e)}")
 
     async def disconnect(self) -> None:

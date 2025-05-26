@@ -7,7 +7,7 @@ import { create } from 'zustand';
  * 导航状态存储
  */
 const useNavStore = create((set) => ({
-  // 当前选中的导航项 (search, groups, settings)
+  // 当前选中的导航项 (search, sessions, settings)
   activeNav: 'search', // 默认选中搜索页面
   
   // 记录上次的导航状态，用于恢复
@@ -20,9 +20,9 @@ const useNavStore = create((set) => ({
   
   /**
    * 设置当前活动的导航项
-   * @param {string} nav - 导航项标识 (search, groups, settings)
+   * @param {string} nav - 导航项标识 (search, sessions, settings)
    */
-  setActiveNav: (nav) => set((state) => ({ 
+  setActiveNav: (nav) => set((state) => ({
     activeNav: nav,
     prevActiveNav: state.activeNav
   })),

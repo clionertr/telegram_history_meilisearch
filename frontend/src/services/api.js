@@ -214,6 +214,34 @@ export const clearAllCache = async () => {
     throw error;
   }
 };
+/**
+ * Dialogs API - 获取用户会话列表
+ * @param {number} page - 当前页码，从1开始
+ * @param {number} limit - 每页结果数量
+ * @returns {Promise} - 会话列表Promise
+ */
+export const getDialogs = async (page = 1, limit = 20) => {
+  try {
+    const response = await fetch(`${API_BASE_URL}/api/v1/dialogs?page=${page}&limit=${limit}`, {
+      method: 'GET',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({}));
+      throw new Error(
+        errorData.detail || `获取会话列表失败 (${response.status}: ${response.statusText})`
+      );
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error('获取会话列表API调用失败:', error);
+    throw error;
+  }
+};
 
 export default {
   searchMessages,
@@ -222,5 +250,6 @@ export default {
   removeFromWhitelist,
   getCacheTypes,
   clearCacheTypes,
-  clearAllCache
+  clearAllCache,
+  getDialogs
 };

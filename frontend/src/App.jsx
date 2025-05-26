@@ -1,6 +1,6 @@
 import { useEffect } from 'react';
 import SearchPage from './pages/SearchPage';
-import GroupsPage from './pages/GroupsPage';
+import SessionsPage from './pages/SessionsPage';
 import SettingsPage from './pages/SettingsPage';
 import BottomNavBar from './components/navigation/BottomNavBar';
 import useTelegramSDK from './hooks/useTelegramSDK';
@@ -60,8 +60,8 @@ function App() {
     switch (activeNav) {
       case 'search':
         return <SearchPage />;
-      case 'groups':
-        return <GroupsPage />;
+      case 'sessions':
+        return <SessionsPage />;
       case 'settings':
         return <SettingsPage />;
       default:
