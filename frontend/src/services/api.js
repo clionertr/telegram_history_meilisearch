@@ -6,6 +6,47 @@
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || (import.meta.env.PROD ? 'http://localhost:8000' : '');
 
 /**
+ * 处理API响应
+ */
+const handleResponse = async (response) => {
+  if (!response.ok) {
+    let errorMessage = `HTTP ${response.status}: ${response.statusText}`;
+    
+    try {
+      const errorData = await response.json();
+      if (errorData.detail) {
+        errorMessage = errorData.detail;
+      } else if (errorData.message) {
+        errorMessage = errorData.message;
+      } else if (typeof errorData === 'string') {
+        errorMessage = errorData;
+      }
+    } catch (jsonError) {
+      // 如果响应不是JSON，使用默认错误消息
+      console.warn('无法解析错误响应为JSON:', jsonError);
+    }
+    
+    throw new Error(errorMessage);
+  }
+  return response.json();
+};
+
+/**
+ * 通用的API请求方法
+ */
+const apiRequest = async (endpoint, options = {}) => {
+  const url = `${API_BASE_URL}${endpoint}`;
+  const response = await fetch(url, {
+    headers: {
+      'Content-Type': 'application/json',
+      ...options.headers,
+    },
+    ...options,
+  });
+  return handleResponse(response);
+};
+
+/**
  * 搜索API - 调用后端/api/v1/search端点
  * @param {string} query - 搜索关键词
  * @param {Object} filters - 过滤条件 {chat_type, date_from, date_to}
@@ -14,34 +55,25 @@ const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || (import.meta.env.PROD 
  * @returns {Promise} - 搜索结果Promise
  */
 export const searchMessages = async (query, filters = {}, page = 1, hitsPerPage = 10) => {
-  try {
-    const response = await fetch(`${API_BASE_URL}/api/v1/search`, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-      body: JSON.stringify({
-        query,
-        filters,
-        page,
-        hits_per_page: hitsPerPage
-      }),
-    });
-
-    // 如果响应不成功，抛出错误
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(
-        errorData.detail || `搜索请求失败 (${response.status}: ${response.statusText})`
-      );
+  // 构建请求体，符合后端SearchRequest模型
+  const requestBody = {
+    query,
+    page,
+    hits_per_page: hitsPerPage,
+    filters: {
+      chat_type: filters.chat_type || null,
+      date_from: filters.date_from || null,
+      date_to: filters.date_to || null
     }
-
-    // 解析并返回响应数据
-    return await response.json();
-  } catch (error) {
-    console.error('API调用失败:', error);
-    throw error; // 重新抛出错误以便调用者可以处理
-  }
+  };
+  
+  return apiRequest('/api/v1/search', {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+    },
+    body: JSON.stringify(requestBody)
+  });
 };
 
 /**
@@ -223,26 +255,30 @@ export const clearAllCache = async () => {
  * @returns {Promise} - 会话列表Promise
  */
 export const getDialogs = async (page = 1, limit = 20, include_avatars = true) => {
-  try {
-    const response = await fetch(`${API_BASE_URL}/api/v1/dialogs?page=${page}&limit=${limit}&include_avatars=${include_avatars}`, {
-      method: 'GET',
-      headers: {
-        'Content-Type': 'application/json',
-      },
-    });
+  const params = new URLSearchParams({
+    page: page.toString(),
+    limit: limit.toString(),
+    include_avatars: include_avatars.toString(),
+  });
+  
+  return apiRequest(`/api/v1/dialogs?${params}`);
+};
 
-    if (!response.ok) {
-      const errorData = await response.json().catch(() => ({}));
-      throw new Error(
-        errorData.detail || `获取会话列表失败 (${response.status}: ${response.statusText})`
-      );
-    }
+// 缓存管理API
+export const getCacheStatus = async () => {
+  return apiRequest('/api/v1/dialogs/cache/status');
+};
 
-    return await response.json();
-  } catch (error) {
-    console.error('获取会话列表API调用失败:', error);
-    throw error;
-  }
+export const refreshCache = async () => {
+  return apiRequest('/api/v1/dialogs/cache/refresh', {
+    method: 'POST',
+  });
+};
+
+export const clearAvatarsCache = async () => {
+  return apiRequest('/api/v1/dialogs/cache/avatars', {
+    method: 'DELETE',
+  });
 };
 
 export default {
@@ -253,5 +289,8 @@ export default {
   getCacheTypes,
   clearCacheTypes,
   clearAllCache,
-  getDialogs
+  getDialogs,
+  getCacheStatus,
+  refreshCache,
+  clearAvatarsCache
 };

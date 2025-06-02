@@ -71,6 +71,12 @@ class UserBotClient:
         self.config_manager = config_manager or ConfigManager()
         self.session_name = session_name
 
+        # 初始化缓存
+        self._dialogs_cache = []  # 缓存所有会话的基本信息
+        self._avatars_cache = {}  # 缓存头像 {dialog_id: base64_string}
+        self._cache_timestamp = None  # 缓存时间戳
+        self._cache_ttl = 300  # 缓存5分钟（可配置）
+
         # 初始化MeiliSearchService
         # 从配置获取MeiliSearch配置
         host = self.config_manager.get_env("MEILISEARCH_HOST")
@@ -146,6 +152,7 @@ class UserBotClient:
         登录成功后会：
         1. 注册消息事件处理器（新消息和编辑消息）
         2. 执行初始的历史消息同步（所有白名单聊天）
+        3. 初始化会话缓存
 
         Returns:
             TelegramClient: 已启动的Telethon客户端实例
@@ -213,6 +220,11 @@ class UserBotClient:
             total_indexed = sum(result[1] for result in sync_results.values())
             logger.info(f"初始历史同步完成，共处理 {total_processed} 条消息，成功索引 {total_indexed} 条")
             
+            # 初始化会话缓存
+            logger.info("开始初始化会话缓存...")
+            await self._init_dialogs_cache()
+            logger.info(f"会话缓存初始化完成，缓存了 {len(self._dialogs_cache)} 个会话")
+            
             return self._client
             
         except SessionPasswordNeededError:
@@ -240,12 +252,147 @@ class UserBotClient:
             
         return self._client
 
+    async def _init_dialogs_cache(self) -> None:
+        """
+        初始化会话缓存
+        获取所有会话的基本信息并缓存到内存中
+        """
+        try:
+            all_dialogs = await self._client.get_dialogs()
+            self._dialogs_cache = []
+            
+            for dialog in all_dialogs:
+                dialog_name = dialog.name or "未知对话"
+                dialog_id = dialog.id
+                dialog_type_str = "unknown"
+
+                if dialog.is_user:
+                    dialog_type_str = "user"
+                elif dialog.is_group:
+                    dialog_type_str = "group"
+                elif dialog.is_channel:
+                    if hasattr(dialog.entity, 'megagroup') and dialog.entity.megagroup:
+                         dialog_type_str = "group"
+                    else:
+                         dialog_type_str = "channel"
+                
+                dialog_info = {
+                    "id": dialog_id,
+                    "name": dialog_name,
+                    "type": dialog_type_str,
+                    "unread_count": dialog.unread_count if hasattr(dialog, 'unread_count') else 0,
+                    "date": dialog.date.timestamp() if dialog.date else None,
+                    "entity": dialog.entity,  # 保留entity用于后续头像下载
+                }
+                
+                self._dialogs_cache.append(dialog_info)
+            
+            self._cache_timestamp = asyncio.get_event_loop().time()
+            logger.debug(f"缓存了 {len(self._dialogs_cache)} 个会话的基本信息")
+            
+        except Exception as e:
+            logger.error(f"初始化会话缓存失败: {e}")
+            self._dialogs_cache = []
+
+    def _is_cache_valid(self) -> bool:
+        """
+        检查缓存是否有效
+        
+        Returns:
+            bool: 缓存是否在有效期内
+        """
+        if not self._dialogs_cache or self._cache_timestamp is None:
+            return False
+        
+        current_time = asyncio.get_event_loop().time()
+        return (current_time - self._cache_timestamp) < self._cache_ttl
+
+    async def refresh_dialogs_cache(self) -> None:
+        """
+        手动刷新会话缓存
+        """
+        logger.info("手动刷新会话缓存...")
+        await self._init_dialogs_cache()
+        logger.info(f"会话缓存已刷新，当前缓存 {len(self._dialogs_cache)} 个会话")
+
+    async def _download_and_cache_avatar(self, dialog_info: dict) -> str:
+        """
+        下载并缓存单个头像
+        
+        Args:
+            dialog_info: 会话信息字典
+            
+        Returns:
+            str: Base64编码的头像数据或None
+        """
+        dialog_id = dialog_info["id"]
+        dialog_name = dialog_info.get("name", "Unknown")
+        
+        # 检查缓存中是否已有头像
+        if dialog_id in self._avatars_cache:
+            logger.debug(f"从缓存返回对话 {dialog_id} ({dialog_name}) 的头像")
+            return self._avatars_cache[dialog_id]
+        
+        try:
+            entity = dialog_info.get("entity")
+            if not entity:
+                logger.warning(f"对话 {dialog_id} ({dialog_name}) 没有entity信息，无法下载头像")
+                self._avatars_cache[dialog_id] = None
+                return None
+            
+            logger.debug(f"开始下载对话 {dialog_id} ({dialog_name}) 的头像...")
+            
+            # 设置超时时间为5秒
+            photo_bytes = await asyncio.wait_for(
+                self._client.download_profile_photo(entity, file=bytes),
+                timeout=5.0
+            )
+            
+            if photo_bytes:
+                base64_string = base64.b64encode(photo_bytes).decode('utf-8')
+                avatar_data = f"data:image/jpeg;base64,{base64_string}"
+                
+                # 缓存头像
+                self._avatars_cache[dialog_id] = avatar_data
+                logger.info(f"成功下载并缓存对话 {dialog_id} ({dialog_name}) 的头像，大小: {len(photo_bytes)} 字节")
+                return avatar_data
+            else:
+                logger.warning(f"对话 {dialog_id} ({dialog_name}) 没有头像或下载为空")
+                self._avatars_cache[dialog_id] = None
+                return None
+                
+        except asyncio.TimeoutError:
+            logger.warning(f"下载对话 {dialog_id} ({dialog_name}) 头像超时 (5秒)")
+            self._avatars_cache[dialog_id] = None
+            return None
+        except Exception as e:
+            logger.warning(f"下载对话 {dialog_id} ({dialog_name}) 头像失败: {e}")
+            self._avatars_cache[dialog_id] = None
+            return None
+
+    def get_cached_dialogs_count(self) -> int:
+        """
+        获取缓存的会话总数
+        
+        Returns:
+            int: 缓存的会话数量
+        """
+        return len(self._dialogs_cache)
+
+    def clear_avatars_cache(self) -> None:
+        """
+        清除头像缓存
+        """
+        self._avatars_cache.clear()
+        logger.info("头像缓存已清除")
+
     async def get_dialogs_info(self, page: int = 1, limit: int = 20, include_avatars: bool = True) -> dict:
         """
         获取用户账户下的所有对话信息，支持分页。
         
-        使用Telethon客户端的get_dialogs()功能获取所有对话，
-        然后根据分页参数提取指定范围的对话，并返回包含对话详细信息和分页信息的字典。
+        优先使用缓存数据，大幅提升加载速度。缓存包括：
+        1. 会话基本信息缓存（5分钟有效期）
+        2. 头像缓存（永久有效，直到手动清除）
         
         Args:
             page (int): 页码，从1开始。
@@ -266,6 +413,7 @@ class UserBotClient:
                 - limit (int): 每页数量
                 - total_pages (int): 总页数
                 - has_avatars (bool): 是否包含头像数据
+                - from_cache (bool): 数据是否来自缓存
             
         Raises:
             RuntimeError: 如果客户端未初始化或未连接。
@@ -286,108 +434,65 @@ class UserBotClient:
             raise ValueError("每页数量 (limit) 必须大于等于 1")
             
         try:
-            logger.info(f"开始获取对话列表 (分页: page={page}, limit={limit}, 包含头像: {include_avatars})...")
+            logger.info(f"获取对话列表 (分页: page={page}, limit={limit}, 包含头像: {include_avatars})")
             
-            # Telethon 的 get_dialogs() 不直接支持 offset 来跳过一定数量的对话。
-            # 它有一个 `offset_id` 和 `offset_date` 参数，但这些用于从特定点开始获取。
-            # 为了实现简单的页码分页，我们可以获取所有对话，然后在Python中进行切片。
-            # 注意：如果对话数量非常大 (例如几千个)，这可能不是最高效的方法，
-            # 因为它会先加载所有对话到内存中。
-            # 对于非常大的列表，更高级的分页可能需要使用 offset_id/offset_date，
-            # 但这会使页码逻辑复杂化。目前采用内存分页。
+            # 检查缓存是否有效
+            if not self._is_cache_valid():
+                logger.info("缓存已过期或不存在，重新获取会话数据...")
+                await self._init_dialogs_cache()
             
-            all_dialogs = await self._client.get_dialogs() # 获取所有对话
+            # 从缓存获取数据
+            all_dialogs = self._dialogs_cache.copy()
             
-            # 计算分页的起始和结束索引
+            if not all_dialogs:
+                logger.warning("缓存为空，可能是获取会话数据失败")
+                return {
+                    "items": [],
+                    "total": 0,
+                    "page": page,
+                    "limit": limit,
+                    "total_pages": 0,
+                    "has_avatars": include_avatars,
+                    "from_cache": False
+                }
+            
+            # 计算分页
+            total_dialogs = len(all_dialogs)
+            total_pages = (total_dialogs + limit - 1) // limit
             start_index = (page - 1) * limit
             end_index = start_index + limit
             
             # 获取当前页的对话
             paginated_dialogs = all_dialogs[start_index:end_index]
             
+            # 准备返回数据
             dialogs_info = []
-            
-            # 先构建基础信息（不包含头像）
-            for dialog in paginated_dialogs:
-                dialog_name = dialog.name or "未知对话"
-                dialog_id = dialog.id
-                dialog_type_str = "unknown"
-
-                if dialog.is_user:
-                    dialog_type_str = "user"
-                elif dialog.is_group: # 包括普通群组和超级群组
-                    dialog_type_str = "group"
-                elif dialog.is_channel:
-                    if hasattr(dialog.entity, 'megagroup') and dialog.entity.megagroup:
-                         dialog_type_str = "group" # 超级群组也视为 group
-                    else:
-                         dialog_type_str = "channel" # 广播频道
-                
-                dialog_info = {
-                    "id": dialog_id,
-                    "name": dialog_name,
-                    "type": dialog_type_str,
-                    "unread_count": dialog.unread_count if hasattr(dialog, 'unread_count') else 0,
-                    "date": dialog.date.timestamp() if dialog.date else None,
-                    "entity": dialog.entity,  # 临时存储entity，用于下载头像
+            for dialog_info in paginated_dialogs:
+                # 复制基本信息（移除entity字段）
+                result_dialog = {
+                    "id": dialog_info["id"],
+                    "name": dialog_info["name"],
+                    "type": dialog_info["type"],
+                    "unread_count": dialog_info["unread_count"],
+                    "date": dialog_info["date"],
                 }
                 
-                if not include_avatars:
-                    # 如果不需要头像，移除entity并设置默认值
-                    dialog_info.pop("entity", None)
-                    dialog_info["avatar_base64"] = None
+                # 处理头像
+                if include_avatars:
+                    avatar = await self._download_and_cache_avatar(dialog_info)
+                    result_dialog["avatar_base64"] = avatar
+                else:
+                    result_dialog["avatar_base64"] = None
                 
-                dialogs_info.append(dialog_info)
+                dialogs_info.append(result_dialog)
             
-            # 如果需要头像，使用并发下载
-            if include_avatars and dialogs_info:
-                logger.info(f"开始并发下载 {len(dialogs_info)} 个对话的头像...")
-                
-                async def download_avatar_safe(dialog_info):
-                    """安全地下载单个对话的头像"""
-                    try:
-                        entity = dialog_info.get("entity")
-                        if entity:
-                            # 设置超时时间为5秒
-                            photo_bytes = await asyncio.wait_for(
-                                self._client.download_profile_photo(entity, file=bytes),
-                                timeout=5.0
-                            )
-                            if photo_bytes:
-                                base64_string = base64.b64encode(photo_bytes).decode('utf-8')
-                                return f"data:image/jpeg;base64,{base64_string}"
-                    except asyncio.TimeoutError:
-                        logger.warning(f"下载对话 {dialog_info['id']} 头像超时")
-                    except Exception as e:
-                        logger.warning(f"下载对话 {dialog_info['id']} ({dialog_info['name']}) 头像失败: {e}")
-                    return None
-                
-                # 并发下载所有头像
-                avatar_tasks = [download_avatar_safe(dialog_info) for dialog_info in dialogs_info]
-                avatars = await asyncio.gather(*avatar_tasks, return_exceptions=True)
-                
-                # 将头像结果分配给对话信息，并清理entity字段
-                for i, dialog_info in enumerate(dialogs_info):
-                    dialog_info.pop("entity", None)  # 移除临时的entity字段
-                    
-                    # 安全地获取头像结果
-                    avatar = avatars[i] if i < len(avatars) else None
-                    if isinstance(avatar, Exception):
-                        logger.warning(f"对话 {dialog_info['id']} 头像下载异常: {avatar}")
-                        avatar = None
-                    
-                    dialog_info["avatar_base64"] = avatar
-                
-                logger.info(f"头像下载完成，成功下载 {sum(1 for avatar in avatars if avatar and not isinstance(avatar, Exception))} 个头像")
-            else:
-                # 清理所有entity字段
-                for dialog_info in dialogs_info:
-                    dialog_info.pop("entity", None)
-                
-            total_dialogs = len(all_dialogs)
-            total_pages = (total_dialogs + limit - 1) // limit  # 向上取整计算总页数
+            # 如果需要头像且有头像需要下载，记录下载情况
+            if include_avatars:
+                cached_count = sum(1 for d in paginated_dialogs if d["id"] in self._avatars_cache and self._avatars_cache[d["id"]])
+                total_count = len(paginated_dialogs)
+                logger.info(f"页面头像状态: {cached_count}/{total_count} 来自缓存")
             
-            logger.info(f"成功获取 {len(dialogs_info)} 个对话信息 (第 {page} 页, 每页 {limit} 条，总对话数 {total_dialogs})")
+            logger.info(f"成功获取 {len(dialogs_info)} 个对话信息 (第 {page} 页, 每页 {limit} 条，总对话数 {total_dialogs}) - 来自缓存")
             
             return {
                 "items": dialogs_info,
@@ -395,7 +500,8 @@ class UserBotClient:
                 "page": page,
                 "limit": limit,
                 "total_pages": total_pages,
-                "has_avatars": include_avatars
+                "has_avatars": include_avatars,
+                "from_cache": True
             }
             
         except ValueError as ve:
@@ -403,7 +509,6 @@ class UserBotClient:
             raise
         except Exception as e:
             logger.error(f"获取对话信息时发生错误: {str(e)}")
-            # 可以在这里添加更具体的错误处理，例如网络错误、API限制等
             raise Exception(f"获取对话信息失败: {str(e)}")
 
     async def disconnect(self) -> None:

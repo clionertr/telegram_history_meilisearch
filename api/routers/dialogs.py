@@ -1,10 +1,14 @@
-from fastapi import APIRouter, Depends, HTTPException
-from typing import List, Any
+from fastapi import APIRouter, Depends, HTTPException, Query, status
+from typing import List, Any, Optional
 # 假设 user_bot_client 是一个可以获取 UserBot 客户端实例的依赖项或全局变量
 # from ...user_bot.client import get_user_bot_client_instance # 这种相对导入可能需要调整
 # 临时的处理方式，直到我们有更好的 UserBot 客户端注入方式
 from user_bot.client import UserBotClient # 直接导入，假设 UserBotClient 可以被实例化或有一个全局实例
 from core.config_manager import ConfigManager # 假设配置管理器可以这样导入
+import logging
+from user_bot import user_bot_client
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -46,64 +50,151 @@ async def get_user_bot_client():
         print(f"Error getting UserBot client: {e}")
         raise HTTPException(status_code=500, detail=f"Could not get UserBot client: {str(e)}")
 
-@router.get("/dialogs") # 响应模型已调整为包含分页信息的字典
-async def get_dialogs_api(
-    page: int = 1, 
-    limit: int = 20,
-    include_avatars: bool = True,  # 新增参数：是否包含头像
-    # user_bot: UserBotClient = Depends(get_user_bot_client) # 依赖注入 UserBot 客户端
+@router.get("/dialogs")
+async def get_dialogs(
+    page: int = Query(1, ge=1, description="页码，从1开始"),
+    limit: int = Query(20, ge=1, le=100, description="每页显示的对话数量，最大100"),
+    include_avatars: bool = Query(True, description="是否包含头像，设置为false可大幅提升加载速度")
 ):
     """
-    获取用户的所有会话（dialogs）。
-    包含会话ID、会话名称/标题、以及会话类型（用户、群组、频道）。
-    支持分页。
+    获取用户的对话列表，支持分页
     
-    参数说明：
-    - page: 页码，从1开始
-    - limit: 每页显示的会话数量，默认20
-    - include_avatars: 是否包含头像，默认True。设置为False可大幅提升加载速度。
+    - **page**: 页码，从1开始
+    - **limit**: 每页显示的对话数量，最大100
+    - **include_avatars**: 是否包含头像，设置为false可大幅提升加载速度
     
-    返回格式：
-    {
-        "items": [...],           // 会话列表
-        "total": 100,            // 总会话数
-        "page": 1,               // 当前页码
-        "limit": 20,             // 每页数量
-        "total_pages": 5,        // 总页数
-        "has_avatars": true      // 是否包含头像数据
-    }
+    返回对话信息列表，包含分页信息。每个对话包含：
+    - id: 对话ID
+    - name: 对话名称
+    - type: 对话类型 (user/group/channel)
+    - unread_count: 未读消息数
+    - date: 最后一条消息时间戳
+    - avatar_base64: 头像数据 (仅当include_avatars=true时)
     """
-    # 获取UserBotClient实例
     try:
-        # UserBotClient使用单例模式，通过_instance类变量存储实例
-        user_bot = UserBotClient._instance
-        
-        if not user_bot:
-            raise HTTPException(status_code=503, detail="UserBot client is not initialized.")
-        
-        # 检查客户端是否已连接
-        if not user_bot._client or not user_bot._client.is_connected():
-            raise HTTPException(status_code=503, detail="UserBot client is not connected.")
-            
-    except Exception as e:
-        print(f"Error getting UserBot client for API: {e}")
-        raise HTTPException(status_code=503, detail=f"UserBot client is not available: {str(e)}")
+        if not user_bot_client or not hasattr(user_bot_client, '_client') or not user_bot_client._client:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="UserBot客户端未初始化"
+            )
 
-    try:
-        # 调用 UserBotClient 中的 get_dialogs_info 方法
-        # 注意：get_dialogs_info 方法需要支持分页参数和头像参数
-        dialogs_info = await user_bot.get_dialogs_info(page=page, limit=limit, include_avatars=include_avatars)
+        result = await user_bot_client.get_dialogs_info(
+            page=page,
+            limit=limit,
+            include_avatars=include_avatars
+        )
         
-        if dialogs_info is None:
-             raise HTTPException(status_code=500, detail="Failed to retrieve dialogs from UserBot.")
-        return dialogs_info
-    except AttributeError as e:
-        # 如果 get_dialogs_info 方法不存在或不支持分页参数
-        print(f"AttributeError in get_dialogs_api: {e}")
-        raise HTTPException(status_code=501, detail=f"UserBot's get_dialogs_info method is not implemented or does not support pagination: {e}")
+        return result
+        
     except Exception as e:
-        print(f"Error calling get_dialogs_info: {e}")
-        # 可以根据具体的异常类型返回不同的错误码
-        raise HTTPException(status_code=500, detail=f"An error occurred while fetching dialogs: {str(e)}")
+        logger.error(f"获取对话列表失败: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"获取对话列表失败: {str(e)}"
+        )
+
+@router.get("/dialogs/cache/status")
+async def get_cache_status():
+    """
+    获取会话缓存状态
+    
+    返回缓存的统计信息，包括：
+    - cached_dialogs_count: 缓存的会话数量
+    - cached_avatars_count: 缓存的头像数量  
+    - cache_valid: 缓存是否有效
+    - cache_age_seconds: 缓存年龄（秒）
+    """
+    try:
+        if not user_bot_client or not hasattr(user_bot_client, '_client') or not user_bot_client._client:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="UserBot客户端未初始化"
+            )
+
+        import asyncio
+        
+        cached_dialogs_count = user_bot_client.get_cached_dialogs_count()
+        cached_avatars_count = len(user_bot_client._avatars_cache)
+        cache_valid = user_bot_client._is_cache_valid()
+        
+        # 计算缓存年龄
+        cache_age_seconds = None
+        if user_bot_client._cache_timestamp:
+            current_time = asyncio.get_event_loop().time()
+            cache_age_seconds = current_time - user_bot_client._cache_timestamp
+        
+        return {
+            "cached_dialogs_count": cached_dialogs_count,
+            "cached_avatars_count": cached_avatars_count,
+            "cache_valid": cache_valid,
+            "cache_age_seconds": cache_age_seconds,
+            "cache_ttl_seconds": user_bot_client._cache_ttl
+        }
+        
+    except Exception as e:
+        logger.error(f"获取缓存状态失败: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"获取缓存状态失败: {str(e)}"
+        )
+
+@router.post("/dialogs/cache/refresh")
+async def refresh_cache():
+    """
+    手动刷新会话缓存
+    
+    重新从Telegram获取所有会话的基本信息并更新缓存。
+    注意：这不会清除头像缓存。
+    """
+    try:
+        if not user_bot_client or not hasattr(user_bot_client, '_client') or not user_bot_client._client:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="UserBot客户端未初始化"
+            )
+
+        await user_bot_client.refresh_dialogs_cache()
+        
+        return {
+            "success": True,
+            "message": "会话缓存已刷新",
+            "cached_dialogs_count": user_bot_client.get_cached_dialogs_count()
+        }
+        
+    except Exception as e:
+        logger.error(f"刷新缓存失败: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"刷新缓存失败: {str(e)}"
+        )
+
+@router.delete("/dialogs/cache/avatars")
+async def clear_avatars_cache():
+    """
+    清除头像缓存
+    
+    清除所有已缓存的头像数据，下次请求时将重新下载。
+    会话基本信息缓存不受影响。
+    """
+    try:
+        if not user_bot_client or not hasattr(user_bot_client, '_client') or not user_bot_client._client:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="UserBot客户端未初始化"
+            )
+
+        user_bot_client.clear_avatars_cache()
+        
+        return {
+            "success": True,
+            "message": "头像缓存已清除"
+        }
+        
+    except Exception as e:
+        logger.error(f"清除头像缓存失败: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"清除头像缓存失败: {str(e)}"
+        )
 
 # 后续需要将此路由添加到主 FastAPI 应用中
