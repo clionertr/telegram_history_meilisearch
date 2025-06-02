@@ -20,28 +20,27 @@ const useSessionsStore = create((set, get) => ({
 
     try {
       const data = await getDialogs(currentPageToFetch, itemsPerPage);
-      // 假设API返回的数据结构是 { items: [...], total: ... } 或者直接是数组
-      // 我们需要根据实际返回调整
-      // 如果API直接返回数组，并且没有总数，我们需要另一种方式处理 totalSessions 和 totalPages
-      // 暂时假设API直接返回会话数组，并且我们需要在前端计算分页（如果后端不直接提供总数）
-      // 或者，如果后端 get_dialogs_info 返回的是包含总数和当前页数据的对象，则更好
       
-      // 临时处理：假设 getDialogs 直接返回会话数组
-      // 并且我们暂时无法从后端获取 totalSessions
-      // 后续需要改进后端API以返回总数
-      
-      // 更新：根据 user_bot/client.py 的 get_dialogs_info 返回的是 list[dict]
-      // 这意味着我们无法直接从这个API获取总会话数。
-      // 为了实现完整的分页，后端API需要调整以返回总数。
-      // 目前，我们将只加载当前页的数据，分页控件可能不准确。
-      
-      set({
-        sessions: data, // 直接使用返回的数据
-        isLoading: false,
-        currentPage: currentPageToFetch,
-        // totalSessions: data.total, // 如果API返回总数
-        // totalPages: Math.ceil(data.total / itemsPerPage), // 如果API返回总数
-      });
+      // 后端现在返回包含分页信息的对象：
+      // { items: [...], total: ..., page: ..., limit: ..., total_pages: ... }
+      if (data && typeof data === 'object' && Array.isArray(data.items)) {
+        set({
+          sessions: data.items,
+          isLoading: false,
+          currentPage: data.page || currentPageToFetch,
+          totalSessions: data.total || 0,
+          totalPages: data.total_pages || 0,
+        });
+      } else {
+        // 兼容旧格式（直接返回数组）
+        set({
+          sessions: Array.isArray(data) ? data : [],
+          isLoading: false,
+          currentPage: currentPageToFetch,
+          totalSessions: Array.isArray(data) ? data.length : 0,
+          totalPages: 1,
+        });
+      }
     } catch (error) {
       console.error("Failed to fetch sessions:", error);
       set({ error: error.message || '获取会话列表失败', isLoading: false });
@@ -50,12 +49,10 @@ const useSessionsStore = create((set, get) => ({
 
   // 设置当前页
   setCurrentPage: (page) => {
-    if (page > 0 && page <= get().totalPages) { // 确保页码有效 (如果totalPages已知)
+    const { totalPages } = get();
+    if (page > 0 && (totalPages === 0 || page <= totalPages)) { // 确保页码有效
       set({ currentPage: page });
       get().fetchSessions(page); // 切换页面时重新获取数据
-    } else if (page > 0) { // 如果totalPages未知，允许设置并获取
-        set({ currentPage: page });
-        get().fetchSessions(page);
     }
   },
   

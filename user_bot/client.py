@@ -240,25 +240,30 @@ class UserBotClient:
             
         return self._client
 
-    async def get_dialogs_info(self, page: int = 1, limit: int = 20) -> list[dict]:
+    async def get_dialogs_info(self, page: int = 1, limit: int = 20) -> dict:
         """
         获取用户账户下的所有对话信息，支持分页。
         
         使用Telethon客户端的get_dialogs()功能获取所有对话，
-        然后根据分页参数提取指定范围的对话，并返回包含对话详细信息的字典列表。
+        然后根据分页参数提取指定范围的对话，并返回包含对话详细信息和分页信息的字典。
         
         Args:
             page (int): 页码，从1开始。
             limit (int): 每页显示的对话数量。
             
         Returns:
-            list[dict]: 包含对话信息的字典列表，每个字典包含:
-                        - id (int): 对话ID
-                        - name (str): 对话名称/标题
-                        - type (str): 对话类型 ('user', 'group', 'channel')
-                        - unread_count (int): 未读消息数
-                        - date (float, optional): 最后一条消息的Unix时间戳
-                        - avatar_base64 (str, optional): 头像的Base64编码字符串 (data URI)
+            dict: 包含对话信息和分页信息的字典:
+                - items (list[dict]): 对话信息列表，每个字典包含:
+                    - id (int): 对话ID
+                    - name (str): 对话名称/标题
+                    - type (str): 对话类型 ('user', 'group', 'channel')
+                    - unread_count (int): 未读消息数
+                    - date (float, optional): 最后一条消息的Unix时间戳
+                    - avatar_base64 (str, optional): 头像的Base64编码字符串 (data URI)
+                - total (int): 总对话数
+                - page (int): 当前页码
+                - limit (int): 每页数量
+                - total_pages (int): 总页数
             
         Raises:
             RuntimeError: 如果客户端未初始化或未连接。
@@ -336,10 +341,19 @@ class UserBotClient:
                     "avatar_base64": avatar_base64,
                 })
                 
-            logger.info(f"成功获取 {len(dialogs_info)} 个对话信息 (第 {page} 页, 每页 {limit} 条，总对话数 {len(all_dialogs)})，包含头像尝试")
+            total_dialogs = len(all_dialogs)
+            total_pages = (total_dialogs + limit - 1) // limit  # 向上取整计算总页数
+            
+            logger.info(f"成功获取 {len(dialogs_info)} 个对话信息 (第 {page} 页, 每页 {limit} 条，总对话数 {total_dialogs})，包含头像尝试")
             # logger.debug(f"当前页对话列表: {dialogs_info}") # 避免日志过长
             
-            return dialogs_info
+            return {
+                "items": dialogs_info,
+                "total": total_dialogs,
+                "page": page,
+                "limit": limit,
+                "total_pages": total_pages
+            }
             
         except ValueError as ve:
             logger.error(f"分页参数错误: {str(ve)}")

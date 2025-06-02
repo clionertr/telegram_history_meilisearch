@@ -46,7 +46,7 @@ async def get_user_bot_client():
         print(f"Error getting UserBot client: {e}")
         raise HTTPException(status_code=500, detail=f"Could not get UserBot client: {str(e)}")
 
-@router.get("/dialogs", response_model=List[Any]) # 响应模型后续会根据 get_dialogs_info 的返回类型调整
+@router.get("/dialogs") # 响应模型已调整为包含分页信息的字典
 async def get_dialogs_api(
     page: int = 1, 
     limit: int = 20,
@@ -57,34 +57,21 @@ async def get_dialogs_api(
     包含会话ID、会话名称/标题、以及会话类型（用户、群组、频道）。
     支持分页。
     """
-    # 临时的 UserBotClient 获取方式
-    user_bot: UserBotClient
+    # 获取UserBotClient实例
     try:
-        # 这是一个非常临时的获取 UserBotClient 实例的方式
-        # 理想情况下，UserBotClient 应该在应用启动时初始化，并通过依赖注入提供
-        if hasattr(UserBotClient, 'instance') and UserBotClient.instance:
-            user_bot = UserBotClient.instance
-            if not user_bot.client or not user_bot.client.is_connected():
-                 await user_bot.ensure_initialized() # 确保客户端已连接
-        else:
-            # 如果没有全局实例，尝试创建一个（这可能不是最佳实践）
-            # print("Attempting to create a new UserBotClient instance for API call.")
-            # config = ConfigManager()
-            # api_id = config.get_telegram_api_id()
-            # api_hash = config.get_telegram_api_hash()
-            # session_name = "user_bot" # 或者从配置中获取
-            # user_bot = UserBotClient(api_id=api_id, api_hash=api_hash, session_name=session_name)
-            # await user_bot.start() # 启动客户端
-            # UserBotClient.instance = user_bot # 缓存实例 (如果适用)
-            # 更好的方式是确保 UserBotClient 在应用启动时已经运行
-            raise HTTPException(status_code=503, detail="UserBot client is not available or not initialized.")
-
+        # UserBotClient使用单例模式，通过_instance类变量存储实例
+        user_bot = UserBotClient._instance
+        
+        if not user_bot:
+            raise HTTPException(status_code=503, detail="UserBot client is not initialized.")
+        
+        # 检查客户端是否已连接
+        if not user_bot._client or not user_bot._client.is_connected():
+            raise HTTPException(status_code=503, detail="UserBot client is not connected.")
+            
     except Exception as e:
-        print(f"Error initializing or getting UserBot client for API: {e}")
+        print(f"Error getting UserBot client for API: {e}")
         raise HTTPException(status_code=503, detail=f"UserBot client is not available: {str(e)}")
-
-    if not user_bot or not user_bot.client:
-        raise HTTPException(status_code=503, detail="UserBot client is not available or not connected.")
 
     try:
         # 调用 UserBotClient 中的 get_dialogs_info 方法
