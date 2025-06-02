@@ -214,15 +214,17 @@ export const clearAllCache = async () => {
     throw error;
   }
 };
+
 /**
  * Dialogs API - 获取用户会话列表
  * @param {number} page - 当前页码，从1开始
  * @param {number} limit - 每页结果数量
+ * @param {boolean} include_avatars - 是否包含头像，默认true。设置为false可大幅提升加载速度
  * @returns {Promise} - 会话列表Promise
  */
-export const getDialogs = async (page = 1, limit = 20) => {
+export const getDialogs = async (page = 1, limit = 20, include_avatars = true) => {
   try {
-    const response = await fetch(`${API_BASE_URL}/api/v1/dialogs?page=${page}&limit=${limit}`, {
+    const response = await fetch(`${API_BASE_URL}/api/v1/dialogs?page=${page}&limit=${limit}&include_avatars=${include_avatars}`, {
       method: 'GET',
       headers: {
         'Content-Type': 'application/json',

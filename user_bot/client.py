@@ -240,7 +240,7 @@ class UserBotClient:
             
         return self._client
 
-    async def get_dialogs_info(self, page: int = 1, limit: int = 20) -> dict:
+    async def get_dialogs_info(self, page: int = 1, limit: int = 20, include_avatars: bool = True) -> dict:
         """
         获取用户账户下的所有对话信息，支持分页。
         
@@ -250,6 +250,7 @@ class UserBotClient:
         Args:
             page (int): 页码，从1开始。
             limit (int): 每页显示的对话数量。
+            include_avatars (bool): 是否包含头像，默认为True。设置为False可大幅提升加载速度。
             
         Returns:
             dict: 包含对话信息和分页信息的字典:
@@ -259,11 +260,12 @@ class UserBotClient:
                     - type (str): 对话类型 ('user', 'group', 'channel')
                     - unread_count (int): 未读消息数
                     - date (float, optional): 最后一条消息的Unix时间戳
-                    - avatar_base64 (str, optional): 头像的Base64编码字符串 (data URI)
+                    - avatar_base64 (str, optional): 头像的Base64编码字符串 (data URI)，仅当include_avatars=True时存在
                 - total (int): 总对话数
                 - page (int): 当前页码
                 - limit (int): 每页数量
                 - total_pages (int): 总页数
+                - has_avatars (bool): 是否包含头像数据
             
         Raises:
             RuntimeError: 如果客户端未初始化或未连接。
@@ -284,7 +286,7 @@ class UserBotClient:
             raise ValueError("每页数量 (limit) 必须大于等于 1")
             
         try:
-            logger.info(f"开始获取对话列表 (分页: page={page}, limit={limit})...")
+            logger.info(f"开始获取对话列表 (分页: page={page}, limit={limit}, 包含头像: {include_avatars})...")
             
             # Telethon 的 get_dialogs() 不直接支持 offset 来跳过一定数量的对话。
             # 它有一个 `offset_id` 和 `offset_date` 参数，但这些用于从特定点开始获取。
@@ -304,11 +306,12 @@ class UserBotClient:
             paginated_dialogs = all_dialogs[start_index:end_index]
             
             dialogs_info = []
+            
+            # 先构建基础信息（不包含头像）
             for dialog in paginated_dialogs:
                 dialog_name = dialog.name or "未知对话"
                 dialog_id = dialog.id
                 dialog_type_str = "unknown"
-                avatar_base64 = None
 
                 if dialog.is_user:
                     dialog_type_str = "user"
@@ -320,39 +323,79 @@ class UserBotClient:
                     else:
                          dialog_type_str = "channel" # 广播频道
                 
-                # 尝试获取头像
-                try:
-                    if dialog.entity: # 确保 entity 存在
-                        photo_bytes = await self._client.download_profile_photo(dialog.entity, file=bytes)
-                        if photo_bytes:
-                            # 假设头像是JPEG格式，实际可能需要更复杂的类型检测或固定为一种格式
-                            base64_string = base64.b64encode(photo_bytes).decode('utf-8')
-                            avatar_base64 = f"data:image/jpeg;base64,{base64_string}"
-                except Exception as e:
-                    logger.warning(f"无法下载对话 {dialog_id} ({dialog_name}) 的头像: {e}")
-                    avatar_base64 = None # 出错则不设置头像
-                
-                dialogs_info.append({
+                dialog_info = {
                     "id": dialog_id,
                     "name": dialog_name,
                     "type": dialog_type_str,
                     "unread_count": dialog.unread_count if hasattr(dialog, 'unread_count') else 0,
                     "date": dialog.date.timestamp() if dialog.date else None,
-                    "avatar_base64": avatar_base64,
-                })
+                    "entity": dialog.entity,  # 临时存储entity，用于下载头像
+                }
+                
+                if not include_avatars:
+                    # 如果不需要头像，移除entity并设置默认值
+                    dialog_info.pop("entity", None)
+                    dialog_info["avatar_base64"] = None
+                
+                dialogs_info.append(dialog_info)
+            
+            # 如果需要头像，使用并发下载
+            if include_avatars and dialogs_info:
+                logger.info(f"开始并发下载 {len(dialogs_info)} 个对话的头像...")
+                
+                async def download_avatar_safe(dialog_info):
+                    """安全地下载单个对话的头像"""
+                    try:
+                        entity = dialog_info.get("entity")
+                        if entity:
+                            # 设置超时时间为5秒
+                            photo_bytes = await asyncio.wait_for(
+                                self._client.download_profile_photo(entity, file=bytes),
+                                timeout=5.0
+                            )
+                            if photo_bytes:
+                                base64_string = base64.b64encode(photo_bytes).decode('utf-8')
+                                return f"data:image/jpeg;base64,{base64_string}"
+                    except asyncio.TimeoutError:
+                        logger.warning(f"下载对话 {dialog_info['id']} 头像超时")
+                    except Exception as e:
+                        logger.warning(f"下载对话 {dialog_info['id']} ({dialog_info['name']}) 头像失败: {e}")
+                    return None
+                
+                # 并发下载所有头像
+                avatar_tasks = [download_avatar_safe(dialog_info) for dialog_info in dialogs_info]
+                avatars = await asyncio.gather(*avatar_tasks, return_exceptions=True)
+                
+                # 将头像结果分配给对话信息，并清理entity字段
+                for i, dialog_info in enumerate(dialogs_info):
+                    dialog_info.pop("entity", None)  # 移除临时的entity字段
+                    
+                    # 安全地获取头像结果
+                    avatar = avatars[i] if i < len(avatars) else None
+                    if isinstance(avatar, Exception):
+                        logger.warning(f"对话 {dialog_info['id']} 头像下载异常: {avatar}")
+                        avatar = None
+                    
+                    dialog_info["avatar_base64"] = avatar
+                
+                logger.info(f"头像下载完成，成功下载 {sum(1 for avatar in avatars if avatar and not isinstance(avatar, Exception))} 个头像")
+            else:
+                # 清理所有entity字段
+                for dialog_info in dialogs_info:
+                    dialog_info.pop("entity", None)
                 
             total_dialogs = len(all_dialogs)
             total_pages = (total_dialogs + limit - 1) // limit  # 向上取整计算总页数
             
-            logger.info(f"成功获取 {len(dialogs_info)} 个对话信息 (第 {page} 页, 每页 {limit} 条，总对话数 {total_dialogs})，包含头像尝试")
-            # logger.debug(f"当前页对话列表: {dialogs_info}") # 避免日志过长
+            logger.info(f"成功获取 {len(dialogs_info)} 个对话信息 (第 {page} 页, 每页 {limit} 条，总对话数 {total_dialogs})")
             
             return {
                 "items": dialogs_info,
                 "total": total_dialogs,
                 "page": page,
                 "limit": limit,
-                "total_pages": total_pages
+                "total_pages": total_pages,
+                "has_avatars": include_avatars
             }
             
         except ValueError as ve:

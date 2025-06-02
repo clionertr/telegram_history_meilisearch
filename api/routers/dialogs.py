@@ -50,12 +50,28 @@ async def get_user_bot_client():
 async def get_dialogs_api(
     page: int = 1, 
     limit: int = 20,
+    include_avatars: bool = True,  # 新增参数：是否包含头像
     # user_bot: UserBotClient = Depends(get_user_bot_client) # 依赖注入 UserBot 客户端
 ):
     """
     获取用户的所有会话（dialogs）。
     包含会话ID、会话名称/标题、以及会话类型（用户、群组、频道）。
     支持分页。
+    
+    参数说明：
+    - page: 页码，从1开始
+    - limit: 每页显示的会话数量，默认20
+    - include_avatars: 是否包含头像，默认True。设置为False可大幅提升加载速度。
+    
+    返回格式：
+    {
+        "items": [...],           // 会话列表
+        "total": 100,            // 总会话数
+        "page": 1,               // 当前页码
+        "limit": 20,             // 每页数量
+        "total_pages": 5,        // 总页数
+        "has_avatars": true      // 是否包含头像数据
+    }
     """
     # 获取UserBotClient实例
     try:
@@ -75,8 +91,8 @@ async def get_dialogs_api(
 
     try:
         # 调用 UserBotClient 中的 get_dialogs_info 方法
-        # 注意：get_dialogs_info 方法需要支持分页参数
-        dialogs_info = await user_bot.get_dialogs_info(page=page, limit=limit)
+        # 注意：get_dialogs_info 方法需要支持分页参数和头像参数
+        dialogs_info = await user_bot.get_dialogs_info(page=page, limit=limit, include_avatars=include_avatars)
         
         if dialogs_info is None:
              raise HTTPException(status_code=500, detail="Failed to retrieve dialogs from UserBot.")
