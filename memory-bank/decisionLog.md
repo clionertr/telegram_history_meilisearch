@@ -346,3 +346,55 @@
 
 **关联 `activeContext.md` 记录:**
 详细的实现过程、API 选择和修复记录在 [`memory-bank/activeContext.md`](memory-bank/activeContext.md:0) 中（由 💻 Code 模式在 2025-05-25 记录的部分，标题为 "SearchBot 快捷命令列表设置功能实现"）。
+## [2025-06-02] 会话功能与缓存系统设计决策 (来自 activeContext.md)
+
+**1. 会话加载性能优化决策 (基于 activeContext.md:149-188):**
+    - **问题识别**: 会话加载慢主要由于头像串行下载耗时。
+    - **后端优化**:
+        - 采用 `asyncio.gather` 实现并发头像下载。
+        - 添加5秒下载超时限制。
+        - 头像下载失败不影响其他数据获取。
+        - 新增 `include_avatars` API参数，允许前端选择是否加载头像，API响应包含 `has_avatars` 字段。
+    - **前端优化**:
+        - 实现 `fetchSessionsFast` 方法，优先加载不含头像的会话列表（快速加载模式）。
+        - 实现 `loadAvatarsForCurrentPage` 方法，异步懒加载当前页头像。
+        - 引入 `SkeletonItem` 组件优化加载反馈。
+        - 分离 `isLoading` 和 `isLoadingAvatars` 状态。
+
+**2. 多级会话缓存系统设计决策 (基于 activeContext.md:268-323):**
+    - **问题背景**: 即使初始加载优化后，页面切换仍需重新获取数据。
+    - **解决方案**: 实现三级缓存架构。
+        - **后端启动时缓存**:
+            - 在 `UserBotClient.start()` 中初始化会话基本信息缓存 (`_dialogs_cache`) 和头像缓存 (`_avatars_cache`)。
+            - 设置缓存TTL (例如5分钟)。
+        - **智能缓存管理 (后端)**:
+            - 实现 `_init_dialogs_cache()`, `_download_and_cache_avatar()`, `_is_cache_valid()`, `refresh_dialogs_cache()`, `clear_avatars_cache()` 等方法。
+        - **优化的API响应流程 (后端)**:
+            - `get_dialogs_info()` 优先使用缓存，缓存失效时自动刷新。
+        - **全局会话缓存 (前端)**:
+            - 在 `sessionsStore.js` 中实现 `allSessionsCache` 存储所有会话数据。
+            - 前端分页实现为纯内存操作。
+        - **渐进式加载策略 (前端)**:
+            - 首次加载获取所有会话基本信息（不含头像）。
+            - 页面切换瞬时完成。
+            - 头像异步按需加载。
+    - **API增强**:
+        - 新增缓存管理端点:
+            - `GET /dialogs/cache/status`
+            - `POST /dialogs/cache/refresh`
+            - `DELETE /dialogs/cache/avatars`
+
+**3. API设计 - 会话获取 (基于 activeContext.md:72, activeContext.md:163-166, activeContext.md:197-199):**
+    - 后端 `get_dialogs_info` 方法返回包含分页信息的字典结构。
+    - 引入 `include_avatars` (boolean, default: true) 查询参数，控制是否返回头像数据。
+    - API响应中包含 `has_avatars` (boolean) 字段，明确标识是否包含头像数据。
+
+**4. 用户体验优化决策 (基于 activeContext.md:94-102):**
+    - 保持原有的emoji风格加载提示和错误显示方式。
+    - 添加空状态提示。
+    - 显示分页信息（当前页范围和总数）。
+    - 添加最后活动时间显示。
+    - Toast通知自动消失。
+    - 分页时自动滚动到顶部。
+    - 集成触觉反馈。
+    - 添加白名单按钮加载状态和防重复点击保护。
