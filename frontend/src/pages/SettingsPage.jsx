@@ -1,6 +1,5 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import useTelegramSDK from '../hooks/useTelegramSDK';
-import useNavStore from '../store/navStore';
 import useSettingsStore from '../store/settingsStore';
 import SettingsCard from '../components/settings/SettingsCard';
 import {
@@ -11,6 +10,7 @@ import {
 } from '../components/settings/SettingsItems';
 import WhitelistManagement from '../components/settings/WhitelistManagement';
 import CacheManagement from '../components/settings/CacheManagement';
+import SyncTimeManagement from '../components/settings/SyncTimeManagement';
 import { ToastManager } from '../components/common/Toast';
 
 /**
@@ -19,11 +19,11 @@ import { ToastManager } from '../components/common/Toast';
  */
 function SettingsPage() {
   const { isAvailable, themeParams } = useTelegramSDK();
-  const { setActiveNav } = useNavStore();
   
   // 本地状态管理
   const [isWhitelistOpen, setIsWhitelistOpen] = useState(false);
   const [isCacheOpen, setIsCacheOpen] = useState(false);
+  const [isSyncTimeOpen, setIsSyncTimeOpen] = useState(false);
   const [toasts, setToasts] = useState([]);
   
   // 从设置store中获取状态和方法
@@ -34,8 +34,7 @@ function SettingsPage() {
     setTheme,
     setSyncFrequency,
     setHistoryRange,
-    setNotificationsEnabled,
-    clearCache
+    setNotificationsEnabled
   } = useSettingsStore();
   
   // 页面样式
@@ -103,6 +102,11 @@ function SettingsPage() {
   const handleNavigateToWhitelist = () => {
     setIsWhitelistOpen(true);
   };
+
+  // 处理同步时间管理导航
+  const handleNavigateToSyncTime = () => {
+    setIsSyncTimeOpen(true);
+  };
   
   return (
     <div className="pb-16 w-full max-w-4xl mx-auto" style={pageStyle}>
@@ -157,6 +161,13 @@ function SettingsPage() {
             options={historyRangeOptions}
             onChange={setHistoryRange}
           />
+
+          <SettingsNavigationItem
+            icon="⏰"
+            label="最旧同步时间管理"
+            description="设置全局和特定聊天的最旧同步时间戳"
+            onNavigate={handleNavigateToSyncTime}
+          />
         </SettingsCard>
         
         {/* 数据与安全卡片 */}
@@ -190,6 +201,13 @@ function SettingsPage() {
       <CacheManagement
         isOpen={isCacheOpen}
         onClose={() => setIsCacheOpen(false)}
+        onToast={addToast}
+      />
+
+      {/* 同步时间管理模态框 */}
+      <SyncTimeManagement
+        isOpen={isSyncTimeOpen}
+        onClose={() => setIsSyncTimeOpen(false)}
         onToast={addToast}
       />
 

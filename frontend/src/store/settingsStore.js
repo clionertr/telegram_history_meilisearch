@@ -2,7 +2,15 @@
  * 设置状态管理 - 使用Zustand管理设置状态
  */
 import { create } from 'zustand';
-import { getWhitelist, addToWhitelist, removeFromWhitelist } from '../services/api';
+import {
+  getWhitelist,
+  addToWhitelist,
+  removeFromWhitelist,
+  getSyncSettings,
+  setGlobalOldestSyncTimestamp,
+  setChatOldestSyncTimestamp,
+  getChatOldestSyncTimestamp
+} from '../services/api';
 
 /**
  * 设置状态存储
@@ -19,6 +27,12 @@ const useSettingsStore = create((set) => ({
     lastSyncTime: null, // 上次同步时间，初始为null
     lastSyncStatus: null, // 'success', 'failed', null
     historyRange: 'last30days', // 'last7days', 'last30days', 'last90days', 'all'
+    // 最旧同步时间管理
+    oldestSyncSettings: {
+      global: null, // 全局最旧同步时间戳
+      chats: {}, // 特定聊天的最旧同步时间戳 {chatId: timestamp}
+      isLoaded: false, // 是否已加载设置
+    },
   },
   
   // 缓存设置
@@ -88,6 +102,114 @@ const useSettingsStore = create((set) => ({
       lastSyncStatus: syncInfo.status || state.sync.lastSyncStatus
     }
   })),
+
+  /**
+   * 加载同步设置
+   * @returns {Promise} 加载操作的Promise
+   */
+  loadSyncSettings: async () => {
+    try {
+      const response = await getSyncSettings();
+      const syncSettings = response.sync_settings || {};
+
+      set((state) => ({
+        sync: {
+          ...state.sync,
+          oldestSyncSettings: {
+            global: syncSettings.global_oldest_sync_timestamp || null,
+            chats: syncSettings.chat_oldest_sync_timestamps || {},
+            isLoaded: true,
+          }
+        }
+      }));
+
+      return { success: true };
+    } catch (error) {
+      console.error('加载同步设置失败:', error);
+      return { success: false, error: error.message };
+    }
+  },
+
+  /**
+   * 设置全局最旧同步时间戳
+   * @param {string|null} timestamp - ISO 8601格式的时间戳，null表示移除设置
+   * @returns {Promise} 设置操作的Promise
+   */
+  setGlobalOldestSyncTimestamp: async (timestamp) => {
+    try {
+      const response = await setGlobalOldestSyncTimestamp(timestamp);
+
+      if (response.success) {
+        set((state) => ({
+          sync: {
+            ...state.sync,
+            oldestSyncSettings: {
+              ...state.sync.oldestSyncSettings,
+              global: timestamp,
+            }
+          }
+        }));
+      }
+
+      return response;
+    } catch (error) {
+      console.error('设置全局最旧同步时间戳失败:', error);
+      return { success: false, error: error.message };
+    }
+  },
+
+  /**
+   * 设置特定聊天的最旧同步时间戳
+   * @param {number} chatId - 聊天ID
+   * @param {string|null} timestamp - ISO 8601格式的时间戳，null表示移除设置
+   * @returns {Promise} 设置操作的Promise
+   */
+  setChatOldestSyncTimestamp: async (chatId, timestamp) => {
+    try {
+      const response = await setChatOldestSyncTimestamp(chatId, timestamp);
+
+      if (response.success) {
+        set((state) => {
+          const newChats = { ...state.sync.oldestSyncSettings.chats };
+          if (timestamp === null) {
+            delete newChats[chatId];
+          } else {
+            newChats[chatId] = timestamp;
+          }
+
+          return {
+            sync: {
+              ...state.sync,
+              oldestSyncSettings: {
+                ...state.sync.oldestSyncSettings,
+                chats: newChats,
+              }
+            }
+          };
+        });
+      }
+
+      return response;
+    } catch (error) {
+      console.error('设置聊天最旧同步时间戳失败:', error);
+      return { success: false, error: error.message };
+    }
+  },
+
+  /**
+   * 获取特定聊天的最旧同步时间戳
+   * @param {number} chatId - 聊天ID
+   * @returns {Promise} 获取操作的Promise
+   */
+  getChatOldestSyncTimestamp: async (chatId) => {
+    try {
+      const response = await getChatOldestSyncTimestamp(chatId);
+      return response;
+    } catch (error) {
+      console.error('获取聊天最旧同步时间戳失败:', error);
+      return { success: false, error: error.message };
+    }
+  },
   
   /**
    * 设置缓存有效期

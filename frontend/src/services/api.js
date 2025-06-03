@@ -281,6 +281,29 @@ export const clearAvatarsCache = async () => {
   });
 };
 
+// 同步设置API
+export const getSyncSettings = async () => {
+  return apiRequest('/api/v1/admin/whitelist/sync_settings');
+};
+
+export const setGlobalOldestSyncTimestamp = async (timestamp) => {
+  return apiRequest('/api/v1/admin/whitelist/sync_settings/global', {
+    method: 'PUT',
+    body: JSON.stringify({ timestamp })
+  });
+};
+
+export const setChatOldestSyncTimestamp = async (chatId, timestamp) => {
+  return apiRequest(`/api/v1/admin/whitelist/sync_settings/chat/${chatId}`, {
+    method: 'PUT',
+    body: JSON.stringify({ timestamp })
+  });
+};
+
+export const getChatOldestSyncTimestamp = async (chatId) => {
+  return apiRequest(`/api/v1/admin/whitelist/sync_settings/chat/${chatId}`);
+};
+
 export default {
   searchMessages,
   getWhitelist,
@@ -292,5 +315,9 @@ export default {
   getDialogs,
   getCacheStatus,
   refreshCache,
-  clearAvatarsCache
+  clearAvatarsCache,
+  getSyncSettings,
+  setGlobalOldestSyncTimestamp,
+  setChatOldestSyncTimestamp,
+  getChatOldestSyncTimestamp
 };
