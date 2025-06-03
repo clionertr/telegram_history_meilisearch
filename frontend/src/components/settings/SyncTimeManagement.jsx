@@ -15,11 +15,13 @@ function SyncTimeManagement({ isOpen, onClose, onToast }) {
   
   // 本地状态
   const [isLoading, setIsLoading] = useState(false);
-  const [globalTimestamp, setGlobalTimestamp] = useState('');
-  const [chatTimestamp, setChatTimestamp] = useState('');
+  const [isRefreshing, setIsRefreshing] = useState(false);
+  const [globalDateTime, setGlobalDateTime] = useState('');
+  const [chatDateTime, setChatDateTime] = useState('');
   const [chatId, setChatId] = useState('');
   const [showGlobalForm, setShowGlobalForm] = useState(false);
   const [showChatForm, setShowChatForm] = useState(false);
+  const [editingChatId, setEditingChatId] = useState(null);
   
   // 从设置store获取状态和方法
   const {
@@ -42,12 +44,62 @@ function SyncTimeManagement({ isOpen, onClose, onToast }) {
     };
   }, [isOpen, hideBottomNav, showBottomNav]);
 
-  // 加载同步设置
+  // 加载同步设置 - 每次打开时都强制刷新数据
   useEffect(() => {
-    if (isOpen && !oldestSyncSettings.isLoaded) {
+    if (isOpen) {
+      // 强制重新加载最新的同步设置数据
       loadSyncSettings();
     }
-  }, [isOpen, oldestSyncSettings.isLoaded, loadSyncSettings]);
+  }, [isOpen, loadSyncSettings]);
+
+  // 手动刷新同步设置数据
+  const handleRefreshData = async () => {
+    setIsRefreshing(true);
+    try {
+      const result = await loadSyncSettings(true);
+      if (result.success) {
+        onToast && onToast('数据已刷新', 'success');
+      } else {
+        onToast && onToast('刷新失败: ' + result.error, 'error');
+      }
+    } catch (error) {
+      onToast && onToast('刷新失败: ' + error.message, 'error');
+    } finally {
+      setIsRefreshing(false);
+    }
+  };
+
+  // 日期时间转换辅助函数
+  const convertDateTimeToISO = (dateTimeLocal) => {
+    if (!dateTimeLocal) return '';
+    try {
+      // datetime-local 格式: YYYY-MM-DDTHH:mm
+      // 转换为 ISO 8601 格式: YYYY-MM-DDTHH:mm:ss.sssZ
+      const date = new Date(dateTimeLocal);
+      return date.toISOString();
+    } catch (error) {
+      console.error('日期时间转换失败:', error);
+      return '';
+    }
+  };
+
+  const convertISOToDateTime = (isoString) => {
+    if (!isoString) return '';
+    try {
+      // ISO 8601 格式转换为 datetime-local 格式
+      const date = new Date(isoString);
+      // 获取本地时间并格式化为 YYYY-MM-DDTHH:mm
+      const year = date.getFullYear();
+      const month = String(date.getMonth() + 1).padStart(2, '0');
+      const day = String(date.getDate()).padStart(2, '0');
+      const hours = String(date.getHours()).padStart(2, '0');
+      const minutes = String(date.getMinutes()).padStart(2, '0');
+      return `${year}-${month}-${day}T${hours}:${minutes}`;
+    } catch (error) {
+      console.error('ISO时间转换失败:', error);
+      return '';
+    }
+  };
 
   // 样式定义
   const overlayStyle = isAvailable && themeParams ? {
@@ -106,17 +158,23 @@ function SyncTimeManagement({ isOpen, onClose, onToast }) {
 
   // 处理设置全局时间戳
   const handleSetGlobalTimestamp = async () => {
-    if (!globalTimestamp.trim()) {
-      onToast && onToast('请输入有效的时间戳', 'error');
+    if (!globalDateTime.trim()) {
+      onToast && onToast('请选择有效的日期时间', 'error');
+      return;
+    }
+
+    const isoTimestamp = convertDateTimeToISO(globalDateTime);
+    if (!isoTimestamp) {
+      onToast && onToast('日期时间格式转换失败', 'error');
       return;
     }
 
     setIsLoading(true);
     try {
-      const result = await setGlobalOldestSyncTimestamp(globalTimestamp);
+      const result = await setGlobalOldestSyncTimestamp(isoTimestamp);
       if (result.success) {
         onToast && onToast('全局最旧同步时间设置成功', 'success');
-        setGlobalTimestamp('');
+        setGlobalDateTime('');
         setShowGlobalForm(false);
       } else {
         onToast && onToast(result.message || '设置失败', 'error');
@@ -147,8 +205,8 @@ function SyncTimeManagement({ isOpen, onClose, onToast }) {
 
   // 处理设置聊天时间戳
   const handleSetChatTimestamp = async () => {
-    if (!chatId.trim() || !chatTimestamp.trim()) {
-      onToast && onToast('请输入有效的聊天ID和时间戳', 'error');
+    if (!chatId.trim() || !chatDateTime.trim()) {
+      onToast && onToast('请输入有效的聊天ID和选择日期时间', 'error');
       return;
     }
 
@@ -158,14 +216,19 @@ function SyncTimeManagement({ isOpen, onClose, onToast }) {
       return;
     }
 
+    const isoTimestamp = convertDateTimeToISO(chatDateTime);
+    if (!isoTimestamp) {
+      onToast && onToast('日期时间格式转换失败', 'error');
+      return;
+    }
+
     setIsLoading(true);
     try {
-      const result = await setChatOldestSyncTimestamp(chatIdNum, chatTimestamp);
+      const result = await setChatOldestSyncTimestamp(chatIdNum, isoTimestamp);
       if (result.success) {
-        onToast && onToast('聊天最旧同步时间设置成功', 'success');
-        setChatId('');
-        setChatTimestamp('');
-        setShowChatForm(false);
+        const actionText = editingChatId ? '修改' : '设置';
+        onToast && onToast(`聊天最旧同步时间${actionText}成功`, 'success');
+        handleCancelEdit(); // 清理编辑状态
       } else {
         onToast && onToast(result.message || '设置失败', 'error');
       }
@@ -193,6 +256,24 @@ function SyncTimeManagement({ isOpen, onClose, onToast }) {
     }
   };
 
+  // 处理编辑聊天时间戳
+  const handleEditChatTimestamp = (chatIdKey, currentTimestamp) => {
+    setEditingChatId(chatIdKey);
+    setChatId(chatIdKey);
+    // 将现有时间戳转换为datetime-local格式并填充
+    const dateTimeLocal = convertISOToDateTime(currentTimestamp);
+    setChatDateTime(dateTimeLocal);
+    setShowChatForm(true);
+  };
+
+  // 处理取消编辑
+  const handleCancelEdit = () => {
+    setEditingChatId(null);
+    setChatId('');
+    setChatDateTime('');
+    setShowChatForm(false);
+  };
+
   if (!isOpen) return null;
 
   return (
@@ -205,14 +286,24 @@ function SyncTimeManagement({ isOpen, onClose, onToast }) {
         <h1 className="text-xl font-medium" style={titleStyle}>
           最旧同步时间管理
         </h1>
-        <button
-          onClick={onClose}
-          className="text-2xl leading-none"
-          style={titleStyle}
-          disabled={isLoading}
-        >
-          ×
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={handleRefreshData}
+            className="px-3 py-1 text-sm rounded-lg border"
+            style={secondaryButtonStyle}
+            disabled={isLoading || isRefreshing}
+          >
+            {isRefreshing ? '刷新中...' : '🔄 刷新'}
+          </button>
+          <button
+            onClick={onClose}
+            className="text-2xl leading-none"
+            style={titleStyle}
+            disabled={isLoading}
+          >
+            ×
+          </button>
+        </div>
       </header>
 
       {/* 内容区域 */}
@@ -237,7 +328,14 @@ function SyncTimeManagement({ isOpen, onClose, onToast }) {
             icon="⚙️"
             label="设置全局时间"
             description="为所有聊天设置统一的最旧同步时间"
-            onNavigate={() => setShowGlobalForm(!showGlobalForm)}
+            onNavigate={() => {
+              // 如果有现有的全局时间戳，转换并填充到表单中
+              if (oldestSyncSettings.global) {
+                const dateTimeLocal = convertISOToDateTime(oldestSyncSettings.global);
+                setGlobalDateTime(dateTimeLocal);
+              }
+              setShowGlobalForm(!showGlobalForm);
+            }}
           />
           
           {oldestSyncSettings.global && (
@@ -255,17 +353,19 @@ function SyncTimeManagement({ isOpen, onClose, onToast }) {
           <SettingsCard title="设置全局时间">
             <div className="p-4">
               <label className="block text-sm font-medium mb-2" style={titleStyle}>
-                时间戳 (ISO 8601格式，如: 2023-01-01T00:00:00Z)
+                选择最旧同步时间
               </label>
               <input
-                type="text"
-                value={globalTimestamp}
-                onChange={(e) => setGlobalTimestamp(e.target.value)}
-                placeholder="2023-01-01T00:00:00Z"
+                type="datetime-local"
+                value={globalDateTime}
+                onChange={(e) => setGlobalDateTime(e.target.value)}
                 className="w-full px-3 py-2 border rounded-lg text-sm"
                 style={inputStyle}
                 disabled={isLoading}
               />
+              <p className="text-xs text-gray-500 mt-1">
+                选择的时间将作为全局最旧同步时间，早于此时间的消息将不会被同步
+              </p>
               <div className="flex gap-2 mt-4">
                 <button
                   onClick={handleSetGlobalTimestamp}
@@ -306,13 +406,22 @@ function SyncTimeManagement({ isOpen, onClose, onToast }) {
                   {formatTimestamp(timestamp)}
                 </div>
               </div>
-              <button
-                onClick={() => handleRemoveChatTimestamp(chatIdKey)}
-                disabled={isLoading}
-                className="text-red-500 text-sm px-2 py-1 rounded"
-              >
-                移除
-              </button>
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() => handleEditChatTimestamp(chatIdKey, timestamp)}
+                  disabled={isLoading || isRefreshing}
+                  className="text-blue-500 text-sm px-2 py-1 rounded"
+                >
+                  编辑
+                </button>
+                <button
+                  onClick={() => handleRemoveChatTimestamp(chatIdKey)}
+                  disabled={isLoading || isRefreshing}
+                  className="text-red-500 text-sm px-2 py-1 rounded"
+                >
+                  移除
+                </button>
+              </div>
             </div>
           ))}
           
@@ -325,7 +434,7 @@ function SyncTimeManagement({ isOpen, onClose, onToast }) {
 
         {/* 聊天设置表单 */}
         {showChatForm && (
-          <SettingsCard title="添加聊天设置">
+          <SettingsCard title={editingChatId ? "编辑聊天设置" : "添加聊天设置"}>
             <div className="p-4 space-y-4">
               <div>
                 <label className="block text-sm font-medium mb-2" style={titleStyle}>
@@ -338,22 +447,27 @@ function SyncTimeManagement({ isOpen, onClose, onToast }) {
                   placeholder="-1001234567890"
                   className="w-full px-3 py-2 border rounded-lg text-sm"
                   style={inputStyle}
-                  disabled={isLoading}
+                  disabled={isLoading || editingChatId} // 编辑模式下禁用聊天ID输入
                 />
+                <p className="text-xs text-gray-500 mt-1">
+                  {editingChatId ? '正在编辑聊天ID: ' + editingChatId : '输入要设置的聊天ID（数字格式）'}
+                </p>
               </div>
               <div>
                 <label className="block text-sm font-medium mb-2" style={titleStyle}>
-                  时间戳 (ISO 8601格式)
+                  选择最旧同步时间
                 </label>
                 <input
-                  type="text"
-                  value={chatTimestamp}
-                  onChange={(e) => setChatTimestamp(e.target.value)}
-                  placeholder="2023-01-01T00:00:00Z"
+                  type="datetime-local"
+                  value={chatDateTime}
+                  onChange={(e) => setChatDateTime(e.target.value)}
                   className="w-full px-3 py-2 border rounded-lg text-sm"
                   style={inputStyle}
                   disabled={isLoading}
                 />
+                <p className="text-xs text-gray-500 mt-1">
+                  此设置将覆盖该聊天的全局设置
+                </p>
               </div>
               <div className="flex gap-2">
                 <button
@@ -362,10 +476,10 @@ function SyncTimeManagement({ isOpen, onClose, onToast }) {
                   className="px-4 py-2 rounded-lg text-sm font-medium"
                   style={buttonStyle}
                 >
-                  {isLoading ? '设置中...' : '设置'}
+                  {isLoading ? (editingChatId ? '修改中...' : '设置中...') : (editingChatId ? '修改' : '设置')}
                 </button>
                 <button
-                  onClick={() => setShowChatForm(false)}
+                  onClick={handleCancelEdit}
                   disabled={isLoading}
                   className="px-4 py-2 rounded-lg text-sm font-medium border"
                   style={secondaryButtonStyle}

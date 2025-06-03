@@ -105,19 +105,33 @@ const useSettingsStore = create((set) => ({
 
   /**
    * 加载同步设置
+   * @param {boolean} forceRefresh - 是否强制刷新，忽略缓存状态
    * @returns {Promise} 加载操作的Promise
    */
-  loadSyncSettings: async () => {
+  loadSyncSettings: async (forceRefresh = false) => {
     try {
       const response = await getSyncSettings();
       const syncSettings = response.sync_settings || {};
+
+      // 解析聊天设置：后端格式是 {chatId: {oldest_sync_timestamp: "..."}}
+      // 前端需要的格式是 {chatId: "timestamp"}
+      const chats = {};
+      Object.entries(syncSettings).forEach(([key, value]) => {
+        // 跳过全局设置
+        if (key === 'global_oldest_sync_timestamp') return;
+
+        // 如果值是对象且包含 oldest_sync_timestamp，则提取时间戳
+        if (value && typeof value === 'object' && value.oldest_sync_timestamp) {
+          chats[key] = value.oldest_sync_timestamp;
+        }
+      });
 
       set((state) => ({
         sync: {
           ...state.sync,
           oldestSyncSettings: {
             global: syncSettings.global_oldest_sync_timestamp || null,
-            chats: syncSettings.chat_oldest_sync_timestamps || {},
+            chats: chats,
             isLoaded: true,
           }
         }
@@ -140,15 +154,9 @@ const useSettingsStore = create((set) => ({
       const response = await setGlobalOldestSyncTimestamp(timestamp);
 
       if (response.success) {
-        set((state) => ({
-          sync: {
-            ...state.sync,
-            oldestSyncSettings: {
-              ...state.sync.oldestSyncSettings,
-              global: timestamp,
-            }
-          }
-        }));
+        // 操作成功后，重新加载最新的同步设置数据
+        const { loadSyncSettings } = useSettingsStore.getState();
+        await loadSyncSettings(true); // 强制刷新
       }
 
       return response;
@@ -169,24 +177,9 @@ const useSettingsStore = create((set) => ({
       const response = await setChatOldestSyncTimestamp(chatId, timestamp);
 
       if (response.success) {
-        set((state) => {
-          const newChats = { ...state.sync.oldestSyncSettings.chats };
-          if (timestamp === null) {
-            delete newChats[chatId];
-          } else {
-            newChats[chatId] = timestamp;
-          }
-
-          return {
-            sync: {
-              ...state.sync,
-              oldestSyncSettings: {
-                ...state.sync.oldestSyncSettings,
-                chats: newChats,
-              }
-            }
-          };
-        });
+        // 操作成功后，重新加载最新的同步设置数据
+        const { loadSyncSettings } = useSettingsStore.getState();
+        await loadSyncSettings(true); // 强制刷新
       }
 
       return response;
