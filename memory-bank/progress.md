@@ -748,3 +748,24 @@
 - **并发优化**: 后端使用 `asyncio.gather` 并发下载头像，5秒超时控制，错误隔离。
 - **缓存一致性**: 前后端缓存同步机制，自动缓存失效和刷新，支持手动缓存控制。
 - **渐进增强**: 向后兼容现有API，渐进式功能启用，优雅降级处理。
+---
+
+## 功能更新与优化 (截至 2025-06-03)
+
+**执行者:** clionertr (根据 commit 信息推断)
+
+**主要成果 (基于最近的 commit):**
+
+*   **`0dfaee0`: feat: 更新同步时间管理功能，增强用户体验**
+    *   **概述:** 对前端设置中的同步时间管理功能进行了用户体验上的优化。这可能包括更清晰的界面布局、更友好的交互方式或更完善的提示信息，旨在让用户更方便地设置和理解同步时间相关的选项。
+    *   **相关模块可能涉及:** `frontend/src/pages/SettingsPage.jsx`, `frontend/src/components/settings/SyncTimeManagement.jsx` (如果存在此组件), `frontend/src/store/settingsStore.js`。
+
+*   **`d33ac09`: feat: 添加同步时间管理功能，优化设置页面**
+    *   **概述:** 在前端的设置页面中集成了新的功能模块，用于管理消息同步的时间范围。用户现在可以通过这个界面来配置“最旧同步时间”，以控制 User Bot 缓存历史消息的深度。
+    *   **相关模块可能涉及:** `frontend/src/pages/SettingsPage.jsx`, `frontend/src/components/settings/SettingsItems.jsx`, `frontend/src/store/settingsStore.js`, 可能新增了专门的同步时间管理组件。
+
+*   **`8143c4d`: feat: 优化会话页面白名单管理功能，支持添加和移除操作**
+    *   **概述:** 增强了前端会话页面的白名单管理能力。用户现在可以直接在会话列表或会话详情中，方便地将某个聊天添加或移出白名单，而无需跳转到设置页面进行操作。这提升了白名单管理的便捷性和效率。
+    *   **相关模块可能涉及:** `frontend/src/pages/SessionsPage.jsx`, `frontend/src/components/settings/WhitelistManagement.jsx` (可能被复用或调整), `frontend/src/store/sessionsStore.js`, `frontend/src/services/api.js` (与后端白名单API交互)。
+
+**详细日志:** 这些 commit 的具体代码更改和上下文可以在项目的 Git 历史中查看。
