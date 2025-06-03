@@ -200,7 +200,7 @@ const useSettingsStore = create((set) => ({
   removeFromWhitelistAction: async (chatId) => {
     try {
       const response = await removeFromWhitelist(chatId);
-      
+
       // 如果移除成功，更新本地状态
       if (response.success) {
         set((state) => ({
@@ -210,12 +210,22 @@ const useSettingsStore = create((set) => ({
           }
         }));
       }
-      
+
       return response;
     } catch (error) {
       console.error('从白名单移除失败:', error);
       throw error;
     }
+  },
+
+  /**
+   * 检查特定ID是否在白名单中
+   * @param {number} chatId - 要检查的聊天ID
+   * @returns {boolean} 是否在白名单中
+   */
+  isInWhitelist: (chatId) => {
+    const state = useSettingsStore.getState();
+    return state.whitelist.items.includes(chatId);
   },
 }));
 

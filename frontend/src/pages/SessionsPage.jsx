@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from 'react';
 import useTelegramSDK from '../hooks/useTelegramSDK';
 import { useSessionsStore } from '../store/sessionsStore.js';
-import { addToWhitelist } from '../services/api';
+import { addToWhitelist, removeFromWhitelist } from '../services/api';
+import useSettingsStore from '../store/settingsStore';
 
 /**
  * 会话页面组件
@@ -29,8 +30,16 @@ const SessionsPage = () => {
     getCacheInfo
   } = useSessionsStore();
 
+  // 使用设置store获取白名单数据
+  const {
+    whitelist,
+    loadWhitelist,
+    addToWhitelistAction,
+    removeFromWhitelistAction
+  } = useSettingsStore();
+
   // 本地状态管理
-  const [addingToWhitelist, setAddingToWhitelist] = useState(new Set()); // 正在添加到白名单的会话ID集合
+  const [processingWhitelist, setProcessingWhitelist] = useState(new Set()); // 正在处理白名单操作的会话ID集合
   const [toastMessage, setToastMessage] = useState(''); // Toast消息
   const [showCacheStats, setShowCacheStats] = useState(false);
   const [cacheInfo, setCacheInfo] = useState({});
@@ -39,6 +48,12 @@ const SessionsPage = () => {
   useEffect(() => {
     fetchSessions(1);
     fetchCacheStatus();
+    // 加载白名单数据
+    if (!whitelist.isLoaded) {
+      loadWhitelist().catch(error => {
+        console.error('加载白名单失败:', error);
+      });
+    }
   }, []);
 
   // 更新缓存信息
@@ -92,15 +107,28 @@ const SessionsPage = () => {
     }
   }, [toastMessage]);
 
-  // 添加到白名单
-  const handleAddToWhitelist = async (sessionId, sessionName) => {
+  // 检查会话是否在白名单中
+  const isSessionInWhitelist = (sessionId) => {
+    return whitelist.items.includes(sessionId);
+  };
+
+  // 切换白名单状态
+  const handleToggleWhitelist = async (sessionId, sessionName) => {
+    const isInWhitelist = isSessionInWhitelist(sessionId);
+
     try {
-      setAddingToWhitelist(prev => new Set([...prev, sessionId]));
-      
-      await addToWhitelist(sessionId);
-      
-      setToastMessage(`已将 "${sessionName}" 添加到白名单`);
-      
+      setProcessingWhitelist(prev => new Set([...prev, sessionId]));
+
+      if (isInWhitelist) {
+        // 从白名单移除
+        await removeFromWhitelistAction(sessionId);
+        setToastMessage(`已将 "${sessionName}" 从白名单移除`);
+      } else {
+        // 添加到白名单
+        await addToWhitelistAction(sessionId);
+        setToastMessage(`已将 "${sessionName}" 添加到白名单`);
+      }
+
       // 触发触觉反馈
       try {
         triggerHapticFeedback('success');
@@ -108,9 +136,10 @@ const SessionsPage = () => {
         console.warn('触发触觉反馈失败:', error);
       }
     } catch (error) {
-      console.error('添加到白名单失败:', error);
-      setToastMessage(`添加失败: ${error.message}`);
-      
+      console.error('白名单操作失败:', error);
+      const operation = isInWhitelist ? '移除' : '添加';
+      setToastMessage(`${operation}失败: ${error.message}`);
+
       // 触发错误反馈
       try {
         triggerHapticFeedback('error');
@@ -118,7 +147,7 @@ const SessionsPage = () => {
         console.warn('触发触觉反馈失败:', e);
       }
     } finally {
-      setAddingToWhitelist(prev => {
+      setProcessingWhitelist(prev => {
         const newSet = new Set(prev);
         newSet.delete(sessionId);
         return newSet;
@@ -423,18 +452,57 @@ const SessionsPage = () => {
                     
                     {/* 右侧：操作按钮 */}
                     <div className="flex-shrink-0 ml-4">
-                      <button
-                        onClick={() => handleAddToWhitelist(session.id, session.name)}
-                        disabled={addingToWhitelist.has(session.id)}
-                        className={`px-4 py-2 text-sm font-medium rounded transition-colors ${
-                          addingToWhitelist.has(session.id)
-                            ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
-                            : 'bg-green-500 text-white hover:bg-green-600'
-                        }`}
-                        style={addingToWhitelist.has(session.id) ? {} : { backgroundColor: themeParams?.button_color || '#10B981' }}
-                      >
-                        {addingToWhitelist.has(session.id) ? '添加中...' : '加入白名单'}
-                      </button>
+                      {(() => {
+                        const isInWhitelist = isSessionInWhitelist(session.id);
+                        const isProcessing = processingWhitelist.has(session.id);
+
+                        return (
+                          <button
+                            onClick={() => handleToggleWhitelist(session.id, session.name)}
+                            disabled={isProcessing}
+                            className={`px-4 py-2 text-sm font-medium rounded transition-colors ${
+                              isProcessing
+                                ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                                : isInWhitelist
+                                ? 'bg-red-500 text-white hover:bg-red-600'
+                                : 'bg-green-500 text-white hover:bg-green-600'
+                            }`}
+                            style={
+                              isProcessing
+                                ? {}
+                                : isInWhitelist
+                                ? { backgroundColor: '#EF4444' }
+                                : { backgroundColor: themeParams?.button_color || '#10B981' }
+                            }
+                          >
+                            <span className="flex items-center">
+                              {isProcessing ? (
+                                <>
+                                  <svg className="animate-spin -ml-1 mr-2 h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                                    <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
+                                    <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+                                  </svg>
+                                  {isInWhitelist ? '移除中...' : '添加中...'}
+                                </>
+                              ) : isInWhitelist ? (
+                                <>
+                                  <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
+                                  </svg>
+                                  取消白名单
+                                </>
+                              ) : (
+                                <>
+                                  <svg className="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 6v6m0 0v6m0-6h6m-6 0H6" />
+                                  </svg>
+                                  加入白名单
+                                </>
+                              )}
+                            </span>
+                          </button>
+                        );
+                      })()}
                     </div>
                   </div>
                 </div>
