@@ -1,9 +1,6 @@
 import { useState, useEffect } from 'react';
 import useTelegramSDK from '../../hooks/useTelegramSDK';
-import useNavStore from '../../store/navStore';
 import useSettingsStore from '../../store/settingsStore';
-import SettingsCard from './SettingsCard';
-import { SettingsNavigationItem, SettingsInfoItem } from './SettingsItems';
 
 /**
  * 最旧同步时间管理组件
@@ -11,7 +8,6 @@ import { SettingsNavigationItem, SettingsInfoItem } from './SettingsItems';
  */
 function SyncTimeManagement({ isOpen, onClose, onToast }) {
   const { isAvailable, themeParams } = useTelegramSDK();
-  const { hideBottomNav, showBottomNav } = useNavStore();
   
   // 本地状态
   const [isLoading, setIsLoading] = useState(false);
@@ -30,19 +26,6 @@ function SyncTimeManagement({ isOpen, onClose, onToast }) {
     setGlobalOldestSyncTimestamp,
     setChatOldestSyncTimestamp
   } = useSettingsStore();
-
-  // 控制底部导航栏的显示/隐藏
-  useEffect(() => {
-    if (isOpen) {
-      hideBottomNav();
-    } else {
-      showBottomNav();
-    }
-    
-    return () => {
-      showBottomNav();
-    };
-  }, [isOpen, hideBottomNav, showBottomNav]);
 
   // 加载同步设置 - 每次打开时都强制刷新数据
   useEffect(() => {
@@ -102,41 +85,40 @@ function SyncTimeManagement({ isOpen, onClose, onToast }) {
   };
 
   // 样式定义
-  const overlayStyle = isAvailable && themeParams ? {
-    backgroundColor: themeParams.bg_color
-  } : {
-    backgroundColor: '#f9fafb'
+  const overlayStyle = {
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    backdropFilter: 'blur(4px)',
   };
 
-  const titleStyle = isAvailable && themeParams ? {
-    color: themeParams.text_color
-  } : {};
-
-  const inputStyle = isAvailable && themeParams ? {
-    backgroundColor: themeParams.secondary_bg_color || '#ffffff',
+  const modalStyle = isAvailable && themeParams ? {
+    backgroundColor: themeParams.bg_color,
     color: themeParams.text_color,
-    borderColor: themeParams.hint_color + '50'
   } : {
     backgroundColor: '#ffffff',
-    borderColor: '#d1d5db'
+    color: '#000000',
+  };
+
+  const inputStyle = isAvailable && themeParams ? {
+    backgroundColor: themeParams.secondary_bg_color,
+    borderColor: themeParams.hint_color + '40',
+    color: themeParams.text_color,
+  } : {
+    backgroundColor: '#f9fafb',
+    borderColor: '#d1d5db',
+    color: '#111827',
   };
 
   const buttonStyle = isAvailable && themeParams ? {
     backgroundColor: themeParams.button_color,
-    color: themeParams.button_text_color
+    color: themeParams.button_text_color,
   } : {
     backgroundColor: '#3b82f6',
-    color: '#ffffff'
+    color: '#ffffff',
   };
 
-  const secondaryButtonStyle = isAvailable && themeParams ? {
-    backgroundColor: themeParams.secondary_bg_color || '#f3f4f6',
-    color: themeParams.text_color,
-    borderColor: themeParams.hint_color + '50'
-  } : {
-    backgroundColor: '#f3f4f6',
-    color: '#374151',
-    borderColor: '#d1d5db'
+  const dangerButtonStyle = {
+    backgroundColor: '#dc2626',
+    color: '#ffffff',
   };
 
   // 格式化时间戳显示
@@ -278,218 +260,224 @@ function SyncTimeManagement({ isOpen, onClose, onToast }) {
 
   return (
     <div 
-      className="fixed inset-0 z-50 overflow-y-auto"
+      className="fixed inset-0 z-50 flex items-center justify-center p-4"
       style={overlayStyle}
+      onClick={onClose}
     >
-      {/* 头部 */}
-      <header className="px-4 py-4 flex items-center justify-between border-b border-gray-200">
-        <h1 className="text-xl font-medium" style={titleStyle}>
-          最旧同步时间管理
-        </h1>
-        <div className="flex items-center gap-2">
-          <button
-            onClick={handleRefreshData}
-            className="px-3 py-1 text-sm rounded-lg border"
-            style={secondaryButtonStyle}
-            disabled={isLoading || isRefreshing}
-          >
-            {isRefreshing ? '刷新中...' : '🔄 刷新'}
-          </button>
-          <button
-            onClick={onClose}
-            className="text-2xl leading-none"
-            style={titleStyle}
-            disabled={isLoading}
-          >
-            ×
-          </button>
-        </div>
-      </header>
-
-      {/* 内容区域 */}
-      <div className="px-4 py-4">
-        {/* 说明文字 */}
-        <div className="mb-6 p-4 bg-blue-50 rounded-lg">
-          <p className="text-sm text-blue-800">
-            设置最旧同步时间可以限制历史消息同步的范围。早于设定时间的消息将不会被同步。
-            全局设置适用于所有聊天，特定聊天设置会覆盖全局设置。
+      <div 
+        className="w-full max-w-2xl rounded-lg shadow-xl max-h-[90vh] overflow-hidden"
+        style={modalStyle}
+        onClick={(e) => e.stopPropagation()}
+      >
+        {/* 头部 */}
+        <div className="px-6 py-4 border-b border-gray-200">
+          <div className="flex items-center justify-between">
+            <h2 className="text-lg font-semibold">最旧同步时间管理</h2>
+            <div className="flex items-center gap-2">
+              <button
+                onClick={handleRefreshData}
+                disabled={isLoading || isRefreshing}
+                className="px-3 py-1 text-sm rounded-lg border hover:bg-gray-100 transition-colors"
+              >
+                {isRefreshing ? '刷新中...' : '🔄'}
+              </button>
+              <button
+                onClick={onClose}
+                className="p-1 rounded-md hover:bg-gray-100 transition-colors"
+              >
+                <span className="text-xl">×</span>
+              </button>
+            </div>
+          </div>
+          <p className="text-sm opacity-70 mt-1">
+            设置最旧同步时间可以限制历史消息同步的范围
           </p>
         </div>
 
-        {/* 全局设置卡片 */}
-        <SettingsCard title="全局设置">
-          <SettingsInfoItem
-            icon="🌍"
-            label="全局最旧同步时间"
-            value={formatTimestamp(oldestSyncSettings.global)}
-          />
-          
-          <SettingsNavigationItem
-            icon="⚙️"
-            label="设置全局时间"
-            description="为所有聊天设置统一的最旧同步时间"
-            onNavigate={() => {
-              // 如果有现有的全局时间戳，转换并填充到表单中
-              if (oldestSyncSettings.global) {
-                const dateTimeLocal = convertISOToDateTime(oldestSyncSettings.global);
-                setGlobalDateTime(dateTimeLocal);
-              }
-              setShowGlobalForm(!showGlobalForm);
-            }}
-          />
-          
-          {oldestSyncSettings.global && (
-            <SettingsNavigationItem
-              icon="🗑️"
-              label="移除全局设置"
-              description="移除全局最旧同步时间限制"
-              onNavigate={handleRemoveGlobalTimestamp}
-            />
-          )}
-        </SettingsCard>
-
-        {/* 全局设置表单 */}
-        {showGlobalForm && (
-          <SettingsCard title="设置全局时间">
-            <div className="p-4">
-              <label className="block text-sm font-medium mb-2" style={titleStyle}>
-                选择最旧同步时间
-              </label>
-              <input
-                type="datetime-local"
-                value={globalDateTime}
-                onChange={(e) => setGlobalDateTime(e.target.value)}
-                className="w-full px-3 py-2 border rounded-lg text-sm"
-                style={inputStyle}
-                disabled={isLoading}
-              />
-              <p className="text-xs text-gray-500 mt-1">
-                选择的时间将作为全局最旧同步时间，早于此时间的消息将不会被同步
-              </p>
-              <div className="flex gap-2 mt-4">
-                <button
-                  onClick={handleSetGlobalTimestamp}
-                  disabled={isLoading}
-                  className="px-4 py-2 rounded-lg text-sm font-medium"
-                  style={buttonStyle}
-                >
-                  {isLoading ? '设置中...' : '设置'}
-                </button>
-                <button
-                  onClick={() => setShowGlobalForm(false)}
-                  disabled={isLoading}
-                  className="px-4 py-2 rounded-lg text-sm font-medium border"
-                  style={secondaryButtonStyle}
-                >
-                  取消
-                </button>
+        {/* 内容区域 */}
+        <div className="px-6 py-4 max-h-[75vh] overflow-y-auto">
+          {/* 全局设置 */}
+          <div className="mb-6">
+            <h3 className="text-md font-medium mb-3">全局设置</h3>
+            <div className="p-4 border rounded-lg">
+              <div className="mb-3">
+                <span className="text-sm font-medium">当前全局时间: </span>
+                <span className="text-sm">{formatTimestamp(oldestSyncSettings.global)}</span>
               </div>
+              
+              {!showGlobalForm ? (
+                <div className="flex gap-2">
+                  <button
+                    onClick={() => {
+                      if (oldestSyncSettings.global) {
+                        const dateTimeLocal = convertISOToDateTime(oldestSyncSettings.global);
+                        setGlobalDateTime(dateTimeLocal);
+                      }
+                      setShowGlobalForm(true);
+                    }}
+                    className="px-4 py-2 rounded-md text-sm font-medium"
+                    style={buttonStyle}
+                  >
+                    {oldestSyncSettings.global ? '修改' : '设置'}全局时间
+                  </button>
+                  {oldestSyncSettings.global && (
+                    <button
+                      onClick={handleRemoveGlobalTimestamp}
+                      disabled={isLoading}
+                      className="px-4 py-2 rounded-md text-sm font-medium"
+                      style={dangerButtonStyle}
+                    >
+                      移除全局设置
+                    </button>
+                  )}
+                </div>
+              ) : (
+                <div className="space-y-3">
+                  <input
+                    type="datetime-local"
+                    value={globalDateTime}
+                    onChange={(e) => setGlobalDateTime(e.target.value)}
+                    className="w-full px-3 py-2 border rounded-md text-sm"
+                    style={inputStyle}
+                    disabled={isLoading}
+                  />
+                  <div className="flex gap-2">
+                    <button
+                      onClick={handleSetGlobalTimestamp}
+                      disabled={isLoading}
+                      className="px-4 py-2 rounded-md text-sm font-medium"
+                      style={buttonStyle}
+                    >
+                      {isLoading ? '设置中...' : '确认'}
+                    </button>
+                    <button
+                      onClick={() => setShowGlobalForm(false)}
+                      disabled={isLoading}
+                      className="px-4 py-2 rounded-md text-sm font-medium border"
+                    >
+                      取消
+                    </button>
+                  </div>
+                </div>
+              )}
             </div>
-          </SettingsCard>
-        )}
+          </div>
 
-        {/* 特定聊天设置卡片 */}
-        <SettingsCard title="特定聊天设置">
-          <SettingsNavigationItem
-            icon="➕"
-            label="添加聊天设置"
-            description="为特定聊天设置最旧同步时间"
-            onNavigate={() => setShowChatForm(!showChatForm)}
-          />
-          
-          {/* 显示现有的聊天设置 */}
-          {Object.entries(oldestSyncSettings.chats || {}).map(([chatIdKey, timestamp]) => (
-            <div key={chatIdKey} className="flex items-center justify-between p-3 border-b border-gray-100 last:border-b-0">
-              <div>
-                <div className="font-medium" style={titleStyle}>聊天 {chatIdKey}</div>
-                <div className="text-sm opacity-70" style={titleStyle}>
-                  {formatTimestamp(timestamp)}
+          {/* 特定聊天设置 */}
+          <div>
+            <div className="flex items-center justify-between mb-3">
+              <h3 className="text-md font-medium">特定聊天设置</h3>
+              <button
+                onClick={() => setShowChatForm(!showChatForm)}
+                className="text-sm px-3 py-1 rounded text-blue-600 hover:bg-blue-50 transition-colors"
+              >
+                {showChatForm ? '取消添加' : '+ 添加聊天'}
+              </button>
+            </div>
+
+            {/* 添加/编辑聊天表单 */}
+            {showChatForm && (
+              <div className="mb-4 p-4 border rounded-lg bg-gray-50">
+                <h4 className="text-sm font-medium mb-3">
+                  {editingChatId ? `编辑聊天 ${editingChatId}` : '添加新聊天设置'}
+                </h4>
+                <div className="space-y-3">
+                  <div>
+                    <label className="block text-sm font-medium mb-1">聊天ID</label>
+                    <input
+                      type="text"
+                      value={chatId}
+                      onChange={(e) => setChatId(e.target.value)}
+                      placeholder="-1001234567890"
+                      className="w-full px-3 py-2 border rounded-md text-sm"
+                      style={inputStyle}
+                      disabled={isLoading || editingChatId}
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium mb-1">最旧同步时间</label>
+                    <input
+                      type="datetime-local"
+                      value={chatDateTime}
+                      onChange={(e) => setChatDateTime(e.target.value)}
+                      className="w-full px-3 py-2 border rounded-md text-sm"
+                      style={inputStyle}
+                      disabled={isLoading}
+                    />
+                  </div>
+                  <div className="flex gap-2">
+                    <button
+                      onClick={handleSetChatTimestamp}
+                      disabled={isLoading}
+                      className="px-4 py-2 rounded-md text-sm font-medium"
+                      style={buttonStyle}
+                    >
+                      {isLoading ? (editingChatId ? '修改中...' : '设置中...') : (editingChatId ? '修改' : '设置')}
+                    </button>
+                    <button
+                      onClick={handleCancelEdit}
+                      disabled={isLoading}
+                      className="px-4 py-2 rounded-md text-sm font-medium border"
+                    >
+                      取消
+                    </button>
+                  </div>
                 </div>
               </div>
-              <div className="flex items-center gap-2">
-                <button
-                  onClick={() => handleEditChatTimestamp(chatIdKey, timestamp)}
-                  disabled={isLoading || isRefreshing}
-                  className="text-blue-500 text-sm px-2 py-1 rounded"
-                >
-                  编辑
-                </button>
-                <button
-                  onClick={() => handleRemoveChatTimestamp(chatIdKey)}
-                  disabled={isLoading || isRefreshing}
-                  className="text-red-500 text-sm px-2 py-1 rounded"
-                >
-                  移除
-                </button>
-              </div>
-            </div>
-          ))}
-          
-          {Object.keys(oldestSyncSettings.chats || {}).length === 0 && (
-            <div className="p-4 text-center text-gray-500">
-              暂无特定聊天设置
-            </div>
-          )}
-        </SettingsCard>
+            )}
 
-        {/* 聊天设置表单 */}
-        {showChatForm && (
-          <SettingsCard title={editingChatId ? "编辑聊天设置" : "添加聊天设置"}>
-            <div className="p-4 space-y-4">
-              <div>
-                <label className="block text-sm font-medium mb-2" style={titleStyle}>
-                  聊天ID
-                </label>
-                <input
-                  type="text"
-                  value={chatId}
-                  onChange={(e) => setChatId(e.target.value)}
-                  placeholder="-1001234567890"
-                  className="w-full px-3 py-2 border rounded-lg text-sm"
-                  style={inputStyle}
-                  disabled={isLoading || editingChatId} // 编辑模式下禁用聊天ID输入
-                />
-                <p className="text-xs text-gray-500 mt-1">
-                  {editingChatId ? '正在编辑聊天ID: ' + editingChatId : '输入要设置的聊天ID（数字格式）'}
-                </p>
+            {/* 现有聊天设置列表 */}
+            {Object.keys(oldestSyncSettings.chats || {}).length === 0 ? (
+              <div className="text-center py-4 text-sm opacity-70">
+                暂无特定聊天设置
               </div>
-              <div>
-                <label className="block text-sm font-medium mb-2" style={titleStyle}>
-                  选择最旧同步时间
-                </label>
-                <input
-                  type="datetime-local"
-                  value={chatDateTime}
-                  onChange={(e) => setChatDateTime(e.target.value)}
-                  className="w-full px-3 py-2 border rounded-lg text-sm"
-                  style={inputStyle}
-                  disabled={isLoading}
-                />
-                <p className="text-xs text-gray-500 mt-1">
-                  此设置将覆盖该聊天的全局设置
-                </p>
+            ) : (
+              <div className="space-y-2">
+                {Object.entries(oldestSyncSettings.chats || {}).map(([chatIdKey, timestamp]) => (
+                  <div 
+                    key={chatIdKey}
+                    className="flex items-center justify-between p-3 rounded-md border"
+                  >
+                    <div>
+                      <div className="text-sm font-medium">
+                        聊天 {chatIdKey}
+                      </div>
+                      <div className="text-xs opacity-70">
+                        {formatTimestamp(timestamp)}
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <button
+                        onClick={() => handleEditChatTimestamp(chatIdKey, timestamp)}
+                        disabled={isLoading || isRefreshing}
+                        className="text-blue-500 text-sm px-2 py-1 rounded hover:bg-blue-50"
+                      >
+                        编辑
+                      </button>
+                      <button
+                        onClick={() => handleRemoveChatTimestamp(chatIdKey)}
+                        disabled={isLoading || isRefreshing}
+                        className="text-red-500 text-sm px-2 py-1 rounded hover:bg-red-50"
+                      >
+                        移除
+                      </button>
+                    </div>
+                  </div>
+                ))}
               </div>
-              <div className="flex gap-2">
-                <button
-                  onClick={handleSetChatTimestamp}
-                  disabled={isLoading}
-                  className="px-4 py-2 rounded-lg text-sm font-medium"
-                  style={buttonStyle}
-                >
-                  {isLoading ? (editingChatId ? '修改中...' : '设置中...') : (editingChatId ? '修改' : '设置')}
-                </button>
-                <button
-                  onClick={handleCancelEdit}
-                  disabled={isLoading}
-                  className="px-4 py-2 rounded-lg text-sm font-medium border"
-                  style={secondaryButtonStyle}
-                >
-                  取消
-                </button>
-              </div>
-            </div>
-          </SettingsCard>
-        )}
+            )}
+          </div>
+        </div>
+
+        {/* 底部 */}
+        <div className="px-6 py-4 border-t border-gray-200">
+          <button
+            onClick={onClose}
+            className="w-full px-4 py-2 rounded-md text-sm font-medium bg-gray-500 text-white hover:bg-gray-600 transition-colors"
+          >
+            关闭
+          </button>
+        </div>
       </div>
     </div>
   );
