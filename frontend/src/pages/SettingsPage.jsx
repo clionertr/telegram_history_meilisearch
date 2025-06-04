@@ -1,6 +1,8 @@
 import { useState } from 'react';
 import useTelegramSDK from '../hooks/useTelegramSDK';
 import useSettingsStore from '../store/settingsStore';
+import ThemeToggle from '../components/common/ThemeToggle';
+import ThemeDemo from '../components/common/ThemeDemo';
 import SettingsCard from '../components/settings/SettingsCard';
 import {
   SettingsNavigationItem,
@@ -24,6 +26,7 @@ function SettingsPage() {
   const [isWhitelistOpen, setIsWhitelistOpen] = useState(false);
   const [isCacheOpen, setIsCacheOpen] = useState(false);
   const [isSyncTimeOpen, setIsSyncTimeOpen] = useState(false);
+  const [isThemeDemoOpen, setIsThemeDemoOpen] = useState(false);
   const [toasts, setToasts] = useState([]);
   
   // 从设置store中获取状态和方法
@@ -37,18 +40,6 @@ function SettingsPage() {
     setNotificationsEnabled
   } = useSettingsStore();
   
-  // 页面样式
-  const pageStyle = isAvailable && themeParams ? {
-    backgroundColor: themeParams.bg_color
-  } : {
-    backgroundColor: '#f9fafb'
-  };
-  
-  // 标题样式
-  const titleStyle = isAvailable && themeParams ? {
-    color: themeParams.text_color
-  } : {};
-  
   // 格式化上次同步时间的显示
   const formatLastSyncTime = () => {
     if (!sync.lastSyncTime) return '尚未同步';
@@ -59,13 +50,6 @@ function SettingsPage() {
     
     return `${formattedDate} ${formattedTime} - ${sync.lastSyncStatus === 'success' ? '成功' : '失败'}`;
   };
-  
-  // 主题选择项
-  const themeOptions = [
-    { value: 'light', label: '浅色模式' },
-    { value: 'dark', label: '深色模式' },
-    { value: 'auto', label: '跟随系统' }
-  ];
   
   // 同步频率选择项
   const syncFrequencyOptions = [
@@ -107,25 +91,63 @@ function SettingsPage() {
   const handleNavigateToSyncTime = () => {
     setIsSyncTimeOpen(true);
   };
+
+  // 处理主题演示导航
+  const handleNavigateToThemeDemo = () => {
+    setIsThemeDemoOpen(true);
+  };
+
+  // 如果主题演示打开，显示演示页面
+  if (isThemeDemoOpen) {
+    return (
+      <div className="bg-bg-primary min-h-screen">
+        <div className="sticky top-0 z-10 bg-bg-primary/95 backdrop-blur-sm border-b border-border-primary px-4 py-3">
+          <button
+            onClick={() => setIsThemeDemoOpen(false)}
+            className="flex items-center space-x-2 text-accent-primary hover:text-accent-hover transition-theme"
+          >
+            <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+            </svg>
+            <span>返回设置</span>
+          </button>
+        </div>
+        <ThemeDemo />
+      </div>
+    );
+  }
   
   return (
-    <div className="pb-16 w-full max-w-4xl mx-auto" style={pageStyle}>
+    <div className="pb-16 w-full max-w-4xl mx-auto bg-bg-primary text-text-primary min-h-screen transition-theme">
       {/* 页面标题 */}
       <header className="px-4 py-4 flex items-center">
-        <h1 className="text-xl font-medium" style={titleStyle}>设置</h1>
+        <h1 className="text-xl font-medium text-text-primary transition-theme">设置</h1>
       </header>
       
       {/* 设置内容区域 */}
       <div className="px-4">
         {/* 个性化卡片 */}
         <SettingsCard title="个性化">
-          <SettingsSelectItem
-            icon="🎨"
-            label="外观主题"
-            description="选择应用的显示主题"
-            value={appearance.theme}
-            options={themeOptions}
-            onChange={setTheme}
+          {/* 主题设置 */}
+          <div className="flex items-center px-4 py-3 border-b border-border-primary last:border-b-0">
+            <div className="mr-3 text-xl">🎨</div>
+            <div className="flex-1">
+              <div className="text-sm font-medium text-text-primary">外观主题</div>
+              <div className="text-xs mt-0.5 text-text-secondary">
+                选择应用的显示主题，支持跟随系统设置
+              </div>
+            </div>
+            <div className="ml-4">
+              <ThemeToggle mode="detailed" size="medium" />
+            </div>
+          </div>
+
+          {/* 主题演示 */}
+          <SettingsNavigationItem
+            icon="🎭"
+            label="主题演示"
+            description="查看完整的主题系统功能和UI元素效果"
+            onNavigate={handleNavigateToThemeDemo}
           />
           
           <SettingsToggleItem

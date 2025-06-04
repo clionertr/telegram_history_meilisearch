@@ -3,12 +3,14 @@ import SearchPage from './pages/SearchPage';
 import SessionsPage from './pages/SessionsPage';
 import SettingsPage from './pages/SettingsPage';
 import BottomNavBar from './components/navigation/BottomNavBar';
+import ThemeToggle from './components/common/ThemeToggle';
 import useTelegramSDK from './hooks/useTelegramSDK';
+import useTheme from './hooks/useTheme';
 import useNavStore from './store/navStore';
 import './App.css';
 
 /**
- * 应用主组件 - 阶段3重构版本
+ * 应用主组件 - 阶段3重构版本 + 主题系统
  */
 function App() {
   // 使用自定义TMA SDK钩子
@@ -19,6 +21,9 @@ function App() {
     themeParams,
     getThemeCssVars
   } = useTelegramSDK();
+  
+  // 使用主题系统
+  const { isInitializing: isThemeInitializing } = useTheme();
   
   // 获取当前选中的导航项和底部导航栏显示状态
   const { activeNav, isBottomNavVisible } = useNavStore();
@@ -69,20 +74,44 @@ function App() {
     }
   };
 
+  // 主题系统初始化时显示加载状态
+  if (isThemeInitializing) {
+    return (
+      <div className="min-h-screen bg-bg-primary flex items-center justify-center">
+        <div className="text-center">
+          <div className="w-8 h-8 border-2 border-accent-primary border-t-transparent rounded-full animate-spin mx-auto mb-4"></div>
+          <p className="text-text-secondary">正在初始化主题系统...</p>
+        </div>
+      </div>
+    );
+  }
+
   return (
-    <div className="app-container">
-      {/* 主内容区域 */}
-      <main className="app-main">
-        {/* 用户信息显示区域 - 仅在Telegram环境中显示 */}
-        {isAvailable && userInfo && (
-          <div className="user-info-banner">
-            <span className="user-name">
-              欢迎，{getUserDisplayName()}
-              {userInfo.username ? ` (@${userInfo.username})` : ''}
-            </span>
+    <div className="app-container bg-bg-primary text-text-primary transition-theme">
+      {/* 顶部工具栏 */}
+      <header className="sticky top-0 z-40 bg-bg-primary/95 backdrop-blur-sm border-b border-border-primary">
+        <div className="flex items-center justify-between px-4 py-2">
+          {/* 用户信息显示区域 - 仅在Telegram环境中显示 */}
+          <div className="flex-1">
+            {isAvailable && userInfo && (
+              <div className="user-info-banner">
+                <span className="user-name text-text-primary">
+                  欢迎，{getUserDisplayName()}
+                  {userInfo.username ? ` (@${userInfo.username})` : ''}
+                </span>
+              </div>
+            )}
           </div>
-        )}
-        
+          
+          {/* 主题切换按钮 */}
+          <div className="flex items-center space-x-2">
+            <ThemeToggle mode="simple" size="medium" />
+          </div>
+        </div>
+      </header>
+      
+      {/* 主内容区域 */}
+      <main className="app-main flex-1 bg-bg-primary">
         {renderPage()}
       </main>
       

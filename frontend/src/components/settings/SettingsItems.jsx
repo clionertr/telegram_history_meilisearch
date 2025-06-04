@@ -7,21 +7,9 @@ import useTelegramSDK from '../../hooks/useTelegramSDK';
 const SettingsItemBase = ({ icon, label, description, children, onClick }) => {
   const { isAvailable, themeParams } = useTelegramSDK();
   
-  // 文本样式
-  const textStyle = isAvailable && themeParams ? {
-    color: themeParams.text_color
-  } : {};
-  
-  // 描述文本样式
-  const descStyle = isAvailable && themeParams ? {
-    color: themeParams.hint_color
-  } : {
-    color: 'rgb(107 114 128)'
-  };
-  
   return (
     <div 
-      className={`flex items-center px-4 py-3 ${onClick ? 'cursor-pointer active:bg-gray-50' : ''}`}
+      className={`flex items-center px-4 py-3 transition-theme ${onClick ? 'cursor-pointer active:bg-bg-tertiary' : ''}`}
       onClick={onClick}
     >
       {/* 图标区域 */}
@@ -33,9 +21,9 @@ const SettingsItemBase = ({ icon, label, description, children, onClick }) => {
       
       {/* 文本区域 */}
       <div className="flex-1">
-        <div className="text-sm font-medium" style={textStyle}>{label}</div>
+        <div className="text-sm font-medium text-text-primary transition-theme">{label}</div>
         {description && (
-          <div className="text-xs mt-0.5" style={descStyle}>{description}</div>
+          <div className="text-xs mt-0.5 text-text-secondary transition-theme">{description}</div>
         )}
       </div>
       
@@ -56,13 +44,6 @@ export const SettingsNavigationItem = ({
 }) => {
   const { isAvailable, themeParams } = useTelegramSDK();
   
-  // 箭头样式
-  const arrowStyle = isAvailable && themeParams ? {
-    color: themeParams.hint_color
-  } : {
-    color: 'rgb(156 163 175)'
-  };
-  
   return (
     <SettingsItemBase 
       icon={icon} 
@@ -71,7 +52,7 @@ export const SettingsNavigationItem = ({
       onClick={onNavigate}
     >
       {/* 右箭头图标 */}
-      <div style={arrowStyle}>
+      <div className="text-text-secondary transition-theme">
         <span className="text-lg">›</span>
       </div>
     </SettingsItemBase>
@@ -186,37 +167,6 @@ export const SettingsSelectItem = ({
     }
   };
   
-  // 当前值样式
-  const valueStyle = isAvailable && themeParams ? {
-    color: themeParams.hint_color
-  } : {
-    color: 'rgb(107 114 128)'
-  };
-  
-  // 选择器样式
-  const selectorStyle = isAvailable && themeParams ? {
-    backgroundColor: themeParams.secondary_bg_color,
-    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)'
-  } : {
-    backgroundColor: '#ffffff',
-    boxShadow: '0 4px 6px -1px rgba(0, 0, 0, 0.1), 0 2px 4px -1px rgba(0, 0, 0, 0.06)'
-  };
-  
-  // 选择项样式
-  const getOptionStyle = (optValue) => {
-    if (isAvailable && themeParams) {
-      return {
-        color: optValue === value ? themeParams.button_color : themeParams.text_color,
-        backgroundColor: optValue === value ? themeParams.button_color + '20' : 'transparent'
-      };
-    }
-    
-    return {
-      color: optValue === value ? '#3b82f6' : 'inherit',
-      backgroundColor: optValue === value ? '#eff6ff' : 'transparent'
-    };
-  };
-  
   return (
     <div className="relative">
       <SettingsItemBase 
@@ -226,23 +176,23 @@ export const SettingsSelectItem = ({
         onClick={handleClick}
       >
         {/* 当前选中值 */}
-        <div className="text-sm" style={valueStyle}>
+        <div className="text-sm text-text-secondary transition-theme">
           {displayValue}
         </div>
       </SettingsItemBase>
       
       {/* 选择器弹出层 */}
       {isOpen && (
-        <div 
-          className="absolute bottom-full left-0 right-0 z-10 mt-1 rounded-md overflow-hidden"
-          style={selectorStyle}
-        >
+        <div className="absolute bottom-full left-0 right-0 z-10 mt-1 rounded-md overflow-hidden bg-bg-primary border border-border-primary shadow-theme-lg transition-theme">
           <div className="max-h-60 overflow-auto">
             {options.map(option => (
               <div
                 key={option.value}
-                className="px-4 py-2 cursor-pointer hover:bg-gray-50"
-                style={getOptionStyle(option.value)}
+                className={`px-4 py-2 cursor-pointer transition-theme ${
+                  option.value === value 
+                    ? 'bg-accent-primary/10 text-accent-primary' 
+                    : 'text-text-primary hover:bg-bg-tertiary'
+                }`}
                 onClick={() => handleSelect(option.value)}
               >
                 {option.label}
@@ -266,13 +216,6 @@ export const SettingsInfoItem = ({
 }) => {
   const { isAvailable, themeParams } = useTelegramSDK();
   
-  // 值样式
-  const valueStyle = isAvailable && themeParams ? {
-    color: themeParams.hint_color
-  } : {
-    color: 'rgb(107 114 128)'
-  };
-  
   return (
     <SettingsItemBase 
       icon={icon} 
@@ -281,7 +224,7 @@ export const SettingsInfoItem = ({
     >
       {/* 信息值 */}
       {value && (
-        <div className="text-sm" style={valueStyle}>
+        <div className="text-sm text-text-secondary transition-theme">
           {value}
         </div>
       )}

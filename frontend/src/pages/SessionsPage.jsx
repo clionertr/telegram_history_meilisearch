@@ -173,21 +173,6 @@ const SessionsPage = () => {
     return `${hours}小时前`;
   };
 
-  // 页面样式
-  const pageStyle = {
-    backgroundColor: themeParams?.bg_color || '#ffffff',
-    color: themeParams?.text_color || '#000000',
-    minHeight: '100vh',
-  };
-
-  const textStyle = {
-    color: themeParams?.text_color || '#000000',
-  };
-
-  const hintStyle = {
-    color: themeParams?.hint_color || '#999999',
-  };
-
   const renderPagination = () => {
     if (totalPages <= 1) return null;
 
@@ -206,12 +191,11 @@ const SessionsPage = () => {
         <button
           key={i}
           onClick={() => handlePageChange(i)}
-          className={`px-3 py-1 mx-1 rounded ${
+          className={`px-3 py-1 mx-1 rounded transition-theme ${
             i === currentPage
-              ? 'bg-blue-500 text-white'
-              : 'bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600'
+              ? 'bg-accent-primary text-white'
+              : 'bg-bg-secondary text-text-primary border border-border-primary hover:bg-bg-tertiary'
           }`}
-          style={i === currentPage ? { backgroundColor: themeParams?.button_color || '#3b82f6' } : {}}
         >
           {i}
         </button>
@@ -223,7 +207,7 @@ const SessionsPage = () => {
         <button
           onClick={() => handlePageChange(currentPage - 1)}
           disabled={currentPage <= 1}
-          className="px-3 py-1 rounded bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="px-3 py-1 rounded bg-bg-secondary text-text-primary border border-border-primary hover:bg-bg-tertiary disabled:opacity-50 disabled:cursor-not-allowed transition-theme"
         >
           上一页
         </button>
@@ -233,7 +217,7 @@ const SessionsPage = () => {
         <button
           onClick={() => handlePageChange(currentPage + 1)}
           disabled={currentPage >= totalPages}
-          className="px-3 py-1 rounded bg-gray-200 dark:bg-gray-700 text-gray-700 dark:text-gray-300 hover:bg-gray-300 dark:hover:bg-gray-600 disabled:opacity-50 disabled:cursor-not-allowed"
+          className="px-3 py-1 rounded bg-bg-secondary text-text-primary border border-border-primary hover:bg-bg-tertiary disabled:opacity-50 disabled:cursor-not-allowed transition-theme"
         >
           下一页
         </button>
@@ -242,10 +226,10 @@ const SessionsPage = () => {
   };
 
   return (
-    <div style={pageStyle}>
+    <div className="bg-bg-primary text-text-primary min-h-screen transition-theme">
       <div className="max-w-4xl mx-auto p-6">
         <header className="text-center mb-8">
-          <h1 className="text-4xl font-bold mb-2" style={textStyle}>
+          <h1 className="text-4xl font-bold mb-2 text-text-primary transition-theme">
             会话列表
           </h1>
           
@@ -253,16 +237,16 @@ const SessionsPage = () => {
             {/* 缓存状态指示器 */}
             <button
               onClick={() => setShowCacheStats(!showCacheStats)}
-              className="text-sm text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200"
+              className="text-sm text-text-secondary hover:text-text-primary transition-theme"
             >
               {cacheInfo.isCacheInitialized ? (
                 <span className="flex items-center">
-                  <span className="w-2 h-2 bg-green-500 rounded-full mr-2"></span>
+                  <span className="w-2 h-2 bg-success rounded-full mr-2"></span>
                   缓存已启用
                 </span>
               ) : (
                 <span className="flex items-center">
-                  <span className="w-2 h-2 bg-gray-400 rounded-full mr-2"></span>
+                  <span className="w-2 h-2 bg-text-tertiary rounded-full mr-2"></span>
                   未缓存
                 </span>
               )}
@@ -272,15 +256,14 @@ const SessionsPage = () => {
             <button
               onClick={handleRefresh}
               disabled={isLoading}
-              className="px-4 py-2 bg-blue-500 text-white rounded hover:bg-blue-600 disabled:opacity-50 disabled:cursor-not-allowed"
-              style={{ backgroundColor: themeParams?.button_color || '#3b82f6' }}
+              className="px-4 py-2 bg-accent-primary text-white rounded hover:bg-accent-hover disabled:opacity-50 disabled:cursor-not-allowed transition-theme"
             >
               {isLoading ? '刷新中...' : '刷新缓存'}
             </button>
             
             <button
               onClick={handleClearAvatars}
-              className="px-4 py-2 bg-orange-500 text-white rounded hover:bg-orange-600"
+              className="px-4 py-2 bg-warning text-white rounded hover:bg-warning/90 transition-theme"
             >
               清除头像
             </button>
@@ -288,28 +271,28 @@ const SessionsPage = () => {
 
           {/* 缓存统计信息 */}
           {showCacheStats && (
-            <div className="mb-6 p-4 bg-gray-100 dark:bg-gray-800 rounded-lg">
-              <h3 className="text-lg font-semibold mb-2">缓存统计</h3>
+            <div className="mb-6 p-4 bg-bg-secondary border border-border-primary rounded-lg transition-theme">
+              <h3 className="text-lg font-semibold mb-2 text-text-primary transition-theme">缓存统计</h3>
               <div className="grid grid-cols-2 md:grid-cols-4 gap-4 text-sm">
                 <div>
-                  <span className="text-gray-600 dark:text-gray-400">缓存状态:</span>
-                  <span className="ml-2 font-medium">
+                  <span className="text-text-secondary transition-theme">缓存状态:</span>
+                  <span className="ml-2 font-medium text-text-primary transition-theme">
                     {cacheInfo.isCacheInitialized ? '已启用' : '未启用'}
                   </span>
                 </div>
                 <div>
-                  <span className="text-gray-600 dark:text-gray-400">缓存大小:</span>
-                  <span className="ml-2 font-medium">{cacheInfo.cacheSize || 0} 个会话</span>
+                  <span className="text-text-secondary transition-theme">缓存大小:</span>
+                  <span className="ml-2 font-medium text-text-primary transition-theme">{cacheInfo.cacheSize || 0} 个会话</span>
                 </div>
                 <div>
-                  <span className="text-gray-600 dark:text-gray-400">缓存年龄:</span>
-                  <span className="ml-2 font-medium">
+                  <span className="text-text-secondary transition-theme">缓存年龄:</span>
+                  <span className="ml-2 font-medium text-text-primary transition-theme">
                     {formatCacheAge(cacheInfo.cacheAge) || '无'}
                   </span>
                 </div>
                 <div>
-                  <span className="text-gray-600 dark:text-gray-400">头像加载:</span>
-                  <span className="ml-2 font-medium">
+                  <span className="text-text-secondary transition-theme">头像加载:</span>
+                  <span className="ml-2 font-medium text-text-primary transition-theme">
                     {isLoadingAvatars ? '加载中...' : '完成'}
                   </span>
                 </div>
@@ -318,7 +301,7 @@ const SessionsPage = () => {
           )}
           
           {isLoadingAvatars && !isLoading && (
-            <div className="text-sm mt-2" style={hintStyle}>
+            <div className="text-sm mt-2 text-text-secondary transition-theme">
               <span className="inline-flex items-center">
                 <svg className="animate-spin -ml-1 mr-2 h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                   <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
@@ -334,17 +317,17 @@ const SessionsPage = () => {
           <div>
             {/* 分页信息骨架 */}
             <div className="text-center mb-4 animate-pulse">
-              <div className="h-4 bg-gray-300 rounded w-48 mx-auto"></div>
+              <div className="h-4 bg-bg-tertiary rounded w-48 mx-auto transition-theme"></div>
             </div>
             
             {/* 会话列表骨架 */}
             <div className="space-y-4">
               {Array.from({ length: Math.min(pageSize, 5) }).map((_, index) => (
-                <div key={`skeleton-${index}`} className="animate-pulse flex items-center space-x-4 p-4 border-b border-gray-200 dark:border-gray-700">
-                  <div className="rounded-full bg-gray-300 dark:bg-gray-600 h-12 w-12"></div>
+                <div key={`skeleton-${index}`} className="animate-pulse flex items-center space-x-4 p-4 border-b border-border-primary">
+                  <div className="rounded-full bg-bg-tertiary h-12 w-12 transition-theme"></div>
                   <div className="flex-1 space-y-2">
-                    <div className="h-4 bg-gray-300 dark:bg-gray-600 rounded w-3/4"></div>
-                    <div className="h-3 bg-gray-300 dark:bg-gray-600 rounded w-1/2"></div>
+                    <div className="h-4 bg-bg-tertiary rounded w-3/4 transition-theme"></div>
+                    <div className="h-3 bg-bg-tertiary rounded w-1/2 transition-theme"></div>
                   </div>
                 </div>
               ))}
@@ -353,14 +336,14 @@ const SessionsPage = () => {
         )}
         
         {error && !isLoading && (
-          <div className="text-center py-10 text-red-500" style={hintStyle}>
+          <div className="text-center py-10 text-error transition-theme">
             <div className="text-4xl mb-3">⚠️</div>
             加载失败: {error}
           </div>
         )}
         
         {!isLoading && !error && sessions.length === 0 && (
-          <div className="text-center py-10" style={hintStyle}>
+          <div className="text-center py-10 text-text-secondary transition-theme">
             <div className="text-4xl mb-3">🤷</div>
             <p>没有找到会话</p>
           </div>
@@ -370,7 +353,7 @@ const SessionsPage = () => {
           <>
             {/* 分页信息 */}
             {totalSessions > 0 && (
-              <div className="text-center mb-4" style={hintStyle}>
+              <div className="text-center mb-4 text-text-secondary transition-theme">
                 <p className="text-sm">
                   共 {totalSessions} 个会话，当前显示第 {((currentPage - 1) * pageSize) + 1}-{Math.min(currentPage * pageSize, totalSessions)} 个
                 </p>
@@ -381,10 +364,7 @@ const SessionsPage = () => {
               {sessions.map((session) => (
                 <div
                   key={session.id}
-                  className="bg-white dark:bg-gray-800 rounded-lg p-4 border border-gray-200 dark:border-gray-700 shadow-sm hover:shadow-md transition-shadow"
-                  style={{
-                    backgroundColor: themeParams?.secondary_bg_color || '#ffffff'
-                  }}
+                  className="bg-bg-secondary rounded-lg p-4 border border-border-primary shadow-theme-sm hover:shadow-theme-md transition-theme"
                 >
                   <div className="flex items-center justify-between">
                     {/* 左侧：头像和信息 */}
@@ -404,13 +384,13 @@ const SessionsPage = () => {
                           />
                         ) : null}
                         <div 
-                          className="w-12 h-12 rounded-full bg-gray-300 dark:bg-gray-600 flex items-center justify-center text-gray-600 dark:text-gray-300 text-lg font-medium"
+                          className="w-12 h-12 rounded-full bg-bg-tertiary flex items-center justify-center text-text-secondary text-lg font-medium transition-theme"
                           style={{
                             display: session.avatar_base64 && session.avatar_base64 !== null ? 'none' : 'flex'
                           }}
                         >
                           {isLoadingAvatars ? (
-                            <div className="w-6 h-6 border-2 border-blue-500 border-t-transparent rounded-full animate-spin"></div>
+                            <div className="w-6 h-6 border-2 border-accent-primary border-t-transparent rounded-full animate-spin"></div>
                           ) : (
                             session.name ? session.name.charAt(0).toUpperCase() : '?'
                           )}
@@ -419,30 +399,27 @@ const SessionsPage = () => {
                       
                       {/* 会话信息 */}
                       <div className="flex-1 min-w-0">
-                        <h4 
-                          className="text-lg font-medium mb-1 truncate" 
-                          style={{ color: themeParams?.text_color || '#000000' }}
-                        >
+                        <h4 className="text-lg font-medium mb-1 truncate text-text-primary transition-theme">
                           {session.name}
                         </h4>
                         <div className="space-y-1">
                           <div className="flex items-center justify-between text-sm">
-                            <span style={{ color: themeParams?.hint_color || '#666666' }}>
+                            <span className="text-text-secondary transition-theme">
                               类型: {session.type}
                             </span>
-                            <span style={{ color: themeParams?.hint_color || '#666666' }}>
+                            <span className="text-text-secondary transition-theme">
                               ID: {session.id}
                             </span>
                           </div>
                           {session.unread_count > 0 && (
                             <div className="flex items-center">
-                              <span className="text-xs bg-red-100 text-red-800 px-2 py-1 rounded">
+                              <span className="text-xs bg-error/10 text-error px-2 py-1 rounded transition-theme">
                                 {session.unread_count} 条未读消息
                               </span>
                             </div>
                           )}
                           {session.date && (
-                            <p className="text-xs" style={{ color: themeParams?.hint_color || '#999999' }}>
+                            <p className="text-xs text-text-tertiary transition-theme">
                               最后活动: {formatTime(session.date)}
                             </p>
                           )}
@@ -460,20 +437,13 @@ const SessionsPage = () => {
                           <button
                             onClick={() => handleToggleWhitelist(session.id, session.name)}
                             disabled={isProcessing}
-                            className={`px-4 py-2 text-sm font-medium rounded transition-colors ${
+                            className={`px-4 py-2 text-sm font-medium rounded transition-theme ${
                               isProcessing
-                                ? 'bg-gray-300 text-gray-500 cursor-not-allowed'
+                                ? 'bg-bg-tertiary text-text-tertiary cursor-not-allowed'
                                 : isInWhitelist
-                                ? 'bg-red-500 text-white hover:bg-red-600'
-                                : 'bg-green-500 text-white hover:bg-green-600'
+                                ? 'bg-error text-white hover:bg-error/80'
+                                : 'bg-accent-primary text-white hover:bg-accent-hover'
                             }`}
-                            style={
-                              isProcessing
-                                ? {}
-                                : isInWhitelist
-                                ? { backgroundColor: '#EF4444' }
-                                : { backgroundColor: themeParams?.button_color || '#10B981' }
-                            }
                           >
                             <span className="flex items-center">
                               {isProcessing ? (
@@ -520,14 +490,14 @@ const SessionsPage = () => {
 
         {/* 性能提示 */}
         {cacheInfo.isCacheInitialized && !isLoading && (
-          <div className="mt-6 p-3 bg-green-100 dark:bg-green-900/30 border border-green-400 text-green-700 dark:text-green-300 rounded text-sm">
+          <div className="mt-6 p-3 bg-success/10 border border-success text-success rounded text-sm transition-theme">
             ⚡ 缓存已启用：页面切换瞬时完成，头像按需加载
           </div>
         )}
 
         {/* Toast 消息 */}
         {toastMessage && (
-          <div className="fixed bottom-4 right-4 bg-black text-white px-4 py-2 rounded shadow-lg z-50">
+          <div className="fixed bottom-4 right-4 bg-bg-primary text-text-primary border border-border-primary px-4 py-2 rounded shadow-theme-lg z-50 transition-theme">
             {toastMessage}
           </div>
         )}

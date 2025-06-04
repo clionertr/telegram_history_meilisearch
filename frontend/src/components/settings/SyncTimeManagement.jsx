@@ -260,36 +260,34 @@ function SyncTimeManagement({ isOpen, onClose, onToast }) {
 
   return (
     <div 
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={overlayStyle}
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
       onClick={onClose}
     >
       <div 
-        className="w-full max-w-2xl rounded-lg shadow-xl max-h-[90vh] overflow-hidden"
-        style={modalStyle}
+        className="w-full max-w-2xl rounded-lg shadow-theme-xl max-h-[90vh] overflow-hidden bg-bg-primary border border-border-primary transition-theme"
         onClick={(e) => e.stopPropagation()}
       >
         {/* 头部 */}
-        <div className="px-6 py-4 border-b border-gray-200">
+        <div className="px-6 py-4 border-b border-border-primary">
           <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold">最旧同步时间管理</h2>
+            <h2 className="text-lg font-semibold text-text-primary transition-theme">最旧同步时间管理</h2>
             <div className="flex items-center gap-2">
               <button
                 onClick={handleRefreshData}
                 disabled={isLoading || isRefreshing}
-                className="px-3 py-1 text-sm rounded-lg border hover:bg-gray-100 transition-colors"
+                className="px-3 py-1 text-sm rounded-lg border border-border-primary hover:bg-bg-tertiary transition-theme text-text-primary"
               >
                 {isRefreshing ? '刷新中...' : '🔄'}
               </button>
               <button
                 onClick={onClose}
-                className="p-1 rounded-md hover:bg-gray-100 transition-colors"
+                className="p-1 rounded-md hover:bg-bg-tertiary transition-theme text-text-secondary"
               >
                 <span className="text-xl">×</span>
               </button>
             </div>
           </div>
-          <p className="text-sm opacity-70 mt-1">
+          <p className="text-sm text-text-secondary mt-1 transition-theme">
             设置最旧同步时间可以限制历史消息同步的范围
           </p>
         </div>
@@ -298,11 +296,11 @@ function SyncTimeManagement({ isOpen, onClose, onToast }) {
         <div className="px-6 py-4 max-h-[75vh] overflow-y-auto">
           {/* 全局设置 */}
           <div className="mb-6">
-            <h3 className="text-md font-medium mb-3">全局设置</h3>
-            <div className="p-4 border rounded-lg">
+            <h3 className="text-md font-medium mb-3 text-text-primary transition-theme">全局设置</h3>
+            <div className="p-4 border border-border-secondary rounded-lg bg-bg-secondary transition-theme">
               <div className="mb-3">
-                <span className="text-sm font-medium">当前全局时间: </span>
-                <span className="text-sm">{formatTimestamp(oldestSyncSettings.global)}</span>
+                <span className="text-sm font-medium text-text-primary transition-theme">当前全局时间: </span>
+                <span className="text-sm text-text-secondary transition-theme">{formatTimestamp(oldestSyncSettings.global)}</span>
               </div>
               
               {!showGlobalForm ? (
@@ -315,8 +313,7 @@ function SyncTimeManagement({ isOpen, onClose, onToast }) {
                       }
                       setShowGlobalForm(true);
                     }}
-                    className="px-4 py-2 rounded-md text-sm font-medium"
-                    style={buttonStyle}
+                    className="px-4 py-2 rounded-md text-sm font-medium bg-accent-primary text-white hover:bg-accent-hover transition-theme"
                   >
                     {oldestSyncSettings.global ? '修改' : '设置'}全局时间
                   </button>
@@ -324,8 +321,7 @@ function SyncTimeManagement({ isOpen, onClose, onToast }) {
                     <button
                       onClick={handleRemoveGlobalTimestamp}
                       disabled={isLoading}
-                      className="px-4 py-2 rounded-md text-sm font-medium"
-                      style={dangerButtonStyle}
+                      className="px-4 py-2 rounded-md text-sm font-medium bg-error text-white hover:bg-error/80 transition-theme"
                     >
                       移除全局设置
                     </button>
@@ -337,23 +333,21 @@ function SyncTimeManagement({ isOpen, onClose, onToast }) {
                     type="datetime-local"
                     value={globalDateTime}
                     onChange={(e) => setGlobalDateTime(e.target.value)}
-                    className="w-full px-3 py-2 border rounded-md text-sm"
-                    style={inputStyle}
+                    className="w-full px-3 py-2 border border-border-primary rounded-md text-sm bg-bg-primary text-text-primary focus:ring-2 focus:ring-accent-primary focus:border-accent-primary transition-theme"
                     disabled={isLoading}
                   />
                   <div className="flex gap-2">
                     <button
                       onClick={handleSetGlobalTimestamp}
                       disabled={isLoading}
-                      className="px-4 py-2 rounded-md text-sm font-medium"
-                      style={buttonStyle}
+                      className="px-4 py-2 rounded-md text-sm font-medium bg-accent-primary text-white hover:bg-accent-hover transition-theme"
                     >
                       {isLoading ? '设置中...' : '确认'}
                     </button>
                     <button
                       onClick={() => setShowGlobalForm(false)}
                       disabled={isLoading}
-                      className="px-4 py-2 rounded-md text-sm font-medium border"
+                      className="px-4 py-2 rounded-md text-sm font-medium border border-border-primary bg-bg-secondary text-text-primary hover:bg-bg-tertiary transition-theme"
                     >
                       取消
                     </button>
@@ -366,10 +360,10 @@ function SyncTimeManagement({ isOpen, onClose, onToast }) {
           {/* 特定聊天设置 */}
           <div>
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-md font-medium">特定聊天设置</h3>
+              <h3 className="text-md font-medium text-text-primary transition-theme">特定聊天设置</h3>
               <button
                 onClick={() => setShowChatForm(!showChatForm)}
-                className="text-sm px-3 py-1 rounded text-blue-600 hover:bg-blue-50 transition-colors"
+                className="text-sm px-3 py-1 rounded text-accent-primary hover:bg-accent-primary/10 transition-theme"
               >
                 {showChatForm ? '取消添加' : '+ 添加聊天'}
               </button>
@@ -377,31 +371,29 @@ function SyncTimeManagement({ isOpen, onClose, onToast }) {
 
             {/* 添加/编辑聊天表单 */}
             {showChatForm && (
-              <div className="mb-4 p-4 border rounded-lg bg-gray-50">
-                <h4 className="text-sm font-medium mb-3">
+              <div className="mb-4 p-4 border border-border-secondary rounded-lg bg-bg-tertiary transition-theme">
+                <h4 className="text-sm font-medium mb-3 text-text-primary transition-theme">
                   {editingChatId ? `编辑聊天 ${editingChatId}` : '添加新聊天设置'}
                 </h4>
                 <div className="space-y-3">
                   <div>
-                    <label className="block text-sm font-medium mb-1">聊天ID</label>
+                    <label className="block text-sm font-medium mb-1 text-text-primary transition-theme">聊天ID</label>
                     <input
                       type="text"
                       value={chatId}
                       onChange={(e) => setChatId(e.target.value)}
                       placeholder="-1001234567890"
-                      className="w-full px-3 py-2 border rounded-md text-sm"
-                      style={inputStyle}
+                      className="w-full px-3 py-2 border border-border-primary rounded-md text-sm bg-bg-primary text-text-primary placeholder-text-tertiary focus:ring-2 focus:ring-accent-primary focus:border-accent-primary transition-theme"
                       disabled={isLoading || editingChatId}
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium mb-1">最旧同步时间</label>
+                    <label className="block text-sm font-medium mb-1 text-text-primary transition-theme">最旧同步时间</label>
                     <input
                       type="datetime-local"
                       value={chatDateTime}
                       onChange={(e) => setChatDateTime(e.target.value)}
-                      className="w-full px-3 py-2 border rounded-md text-sm"
-                      style={inputStyle}
+                      className="w-full px-3 py-2 border border-border-primary rounded-md text-sm bg-bg-primary text-text-primary focus:ring-2 focus:ring-accent-primary focus:border-accent-primary transition-theme"
                       disabled={isLoading}
                     />
                   </div>
@@ -409,15 +401,14 @@ function SyncTimeManagement({ isOpen, onClose, onToast }) {
                     <button
                       onClick={handleSetChatTimestamp}
                       disabled={isLoading}
-                      className="px-4 py-2 rounded-md text-sm font-medium"
-                      style={buttonStyle}
+                      className="px-4 py-2 rounded-md text-sm font-medium bg-accent-primary text-white hover:bg-accent-hover transition-theme"
                     >
                       {isLoading ? (editingChatId ? '修改中...' : '设置中...') : (editingChatId ? '修改' : '设置')}
                     </button>
                     <button
                       onClick={handleCancelEdit}
                       disabled={isLoading}
-                      className="px-4 py-2 rounded-md text-sm font-medium border"
+                      className="px-4 py-2 rounded-md text-sm font-medium border border-border-primary bg-bg-secondary text-text-primary hover:bg-bg-tertiary transition-theme"
                     >
                       取消
                     </button>
@@ -428,7 +419,7 @@ function SyncTimeManagement({ isOpen, onClose, onToast }) {
 
             {/* 现有聊天设置列表 */}
             {Object.keys(oldestSyncSettings.chats || {}).length === 0 ? (
-              <div className="text-center py-4 text-sm opacity-70">
+              <div className="text-center py-4 text-sm text-text-secondary transition-theme">
                 暂无特定聊天设置
               </div>
             ) : (
@@ -436,30 +427,29 @@ function SyncTimeManagement({ isOpen, onClose, onToast }) {
                 {Object.entries(oldestSyncSettings.chats || {}).map(([chatIdKey, timestamp]) => (
                   <div 
                     key={chatIdKey}
-                    className="flex items-center justify-between p-3 rounded-md border"
+                    className="flex items-center justify-between p-3 rounded-md border border-border-secondary bg-bg-secondary transition-theme"
                   >
                     <div>
-                      <div className="text-sm font-medium">
+                      <div className="text-sm font-medium text-text-primary transition-theme">
                         聊天 {chatIdKey}
                       </div>
-                      <div className="text-xs opacity-70">
+                      <div className="text-xs text-text-secondary transition-theme">
                         {formatTimestamp(timestamp)}
                       </div>
                     </div>
                     <div className="flex items-center gap-2">
                       <button
                         onClick={() => handleEditChatTimestamp(chatIdKey, timestamp)}
-                        disabled={isLoading || isRefreshing}
-                        className="text-blue-500 text-sm px-2 py-1 rounded hover:bg-blue-50"
+                        className="px-3 py-1 text-xs rounded bg-accent-primary text-white hover:bg-accent-hover transition-theme"
                       >
                         编辑
                       </button>
                       <button
                         onClick={() => handleRemoveChatTimestamp(chatIdKey)}
-                        disabled={isLoading || isRefreshing}
-                        className="text-red-500 text-sm px-2 py-1 rounded hover:bg-red-50"
+                        disabled={isLoading}
+                        className="px-3 py-1 text-xs rounded bg-error text-white hover:bg-error/80 disabled:opacity-50 disabled:cursor-not-allowed transition-theme"
                       >
-                        移除
+                        删除
                       </button>
                     </div>
                   </div>
@@ -470,10 +460,10 @@ function SyncTimeManagement({ isOpen, onClose, onToast }) {
         </div>
 
         {/* 底部 */}
-        <div className="px-6 py-4 border-t border-gray-200">
+        <div className="px-6 py-4 border-t border-border-primary">
           <button
             onClick={onClose}
-            className="w-full px-4 py-2 rounded-md text-sm font-medium bg-gray-500 text-white hover:bg-gray-600 transition-colors"
+            className="w-full px-4 py-2 rounded-md text-sm font-medium bg-bg-secondary text-text-primary border border-border-primary hover:bg-bg-tertiary transition-theme"
           >
             关闭
           </button>

@@ -1,10 +1,45 @@
 <!doctype html>
-<html lang="en">
+<html lang="zh-CN">
   <head>
     <meta charset="UTF-8" />
     <link rel="icon" type="image/svg+xml" href="/vite.svg" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>Vite + React</title>
+    
+    <!-- 主题相关meta标签 -->
+    <meta name="theme-color" content="#ffffff" id="theme-color-meta" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="msapplication-navbutton-color" content="#ffffff" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+    
+    <!-- 预加载关键字体 -->
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    
+    <title>同步助手 - Sync All</title>
+    
+    <!-- 防止主题切换时的闪烁 -->
+    <script>
+      // 尽早应用保存的主题，防止闪烁
+      (function() {
+        try {
+          const savedTheme = localStorage.getItem('app-theme') || 'system';
+          const getSystemTheme = () => window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+          const resolvedTheme = savedTheme === 'system' ? getSystemTheme() : savedTheme;
+          
+          document.documentElement.classList.add(resolvedTheme);
+          document.documentElement.style.setProperty('--theme', resolvedTheme);
+          
+          // 更新meta标签颜色
+          const metaThemeColor = document.getElementById('theme-color-meta');
+          if (metaThemeColor) {
+            metaThemeColor.setAttribute('content', resolvedTheme === 'dark' ? '#1f2937' : '#ffffff');
+          }
+        } catch (e) {
+          // 忽略错误，使用默认主题
+          console.warn('主题初始化失败:', e);
+        }
+      })();
+    </script>
   </head>
   <body>
     <div id="root"></div>

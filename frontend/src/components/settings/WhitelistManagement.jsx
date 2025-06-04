@@ -4,14 +4,10 @@ import useSettingsStore from '../../store/settingsStore';
 
 /**
  * 白名单管理组件
- * 提供白名单的显示、添加和删除功能
+ * 用于管理同步白名单
  */
 const WhitelistManagement = ({ isOpen, onClose, onToast }) => {
-  const [chatId, setChatId] = useState('');
-  const [isLoading, setIsLoading] = useState(false);
-  const [isLoadingList, setIsLoadingList] = useState(false);
   const { isAvailable, themeParams } = useTelegramSDK();
-  
   const { 
     whitelist, 
     loadWhitelist, 
@@ -19,7 +15,11 @@ const WhitelistManagement = ({ isOpen, onClose, onToast }) => {
     removeFromWhitelistAction 
   } = useSettingsStore();
 
-  // 组件挂载时加载白名单
+  const [chatId, setChatId] = useState('');
+  const [isLoading, setIsLoading] = useState(false);
+  const [isLoadingList, setIsLoadingList] = useState(false);
+
+  // 初始加载白名单
   useEffect(() => {
     if (isOpen && !whitelist.isLoaded) {
       handleLoadWhitelist();
@@ -74,68 +74,29 @@ const WhitelistManagement = ({ isOpen, onClose, onToast }) => {
     }
   };
 
-  // 样式定义
-  const overlayStyle = {
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    backdropFilter: 'blur(4px)',
-  };
-
-  const modalStyle = isAvailable && themeParams ? {
-    backgroundColor: themeParams.bg_color,
-    color: themeParams.text_color,
-  } : {
-    backgroundColor: '#ffffff',
-    color: '#000000',
-  };
-
-  const inputStyle = isAvailable && themeParams ? {
-    backgroundColor: themeParams.secondary_bg_color,
-    borderColor: themeParams.hint_color + '40',
-    color: themeParams.text_color,
-  } : {
-    backgroundColor: '#f9fafb',
-    borderColor: '#d1d5db',
-    color: '#111827',
-  };
-
-  const buttonStyle = isAvailable && themeParams ? {
-    backgroundColor: themeParams.button_color,
-    color: themeParams.button_text_color,
-  } : {
-    backgroundColor: '#3b82f6',
-    color: '#ffffff',
-  };
-
-  const dangerButtonStyle = {
-    backgroundColor: '#dc2626',
-    color: '#ffffff',
-  };
-
   if (!isOpen) return null;
 
   return (
     <div 
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={overlayStyle}
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
       onClick={onClose}
     >
       <div 
-        className="w-full max-w-md rounded-lg shadow-xl max-h-[80vh] overflow-hidden"
-        style={modalStyle}
+        className="w-full max-w-md rounded-lg shadow-theme-xl max-h-[80vh] overflow-hidden bg-bg-primary border border-border-primary transition-theme"
         onClick={(e) => e.stopPropagation()}
       >
         {/* 头部 */}
-        <div className="px-6 py-4 border-b border-gray-200">
+        <div className="px-6 py-4 border-b border-border-primary">
           <div className="flex items-center justify-between">
-            <h2 className="text-lg font-semibold">白名单管理</h2>
+            <h2 className="text-lg font-semibold text-text-primary transition-theme">白名单管理</h2>
             <button
               onClick={onClose}
-              className="p-1 rounded-md hover:bg-gray-100 transition-colors"
+              className="p-1 rounded-md hover:bg-bg-tertiary transition-theme text-text-secondary"
             >
               <span className="text-xl">×</span>
             </button>
           </div>
-          <p className="text-sm opacity-70 mt-1">
+          <p className="text-sm text-text-secondary mt-1 transition-theme">
             管理需要同步消息的聊天（用户/群组/频道）
           </p>
         </div>
@@ -144,7 +105,7 @@ const WhitelistManagement = ({ isOpen, onClose, onToast }) => {
         <div className="px-6 py-4 max-h-96 overflow-y-auto">
           {/* 添加新聊天 */}
           <div className="mb-6">
-            <label className="block text-sm font-medium mb-2">
+            <label className="block text-sm font-medium mb-2 text-text-primary transition-theme">
               添加聊天ID
             </label>
             <div className="flex gap-2">
@@ -153,15 +114,13 @@ const WhitelistManagement = ({ isOpen, onClose, onToast }) => {
                 value={chatId}
                 onChange={(e) => setChatId(e.target.value)}
                 placeholder="输入聊天ID（如：123456）"
-                className="flex-1 px-3 py-2 border rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-blue-500"
-                style={inputStyle}
+                className="flex-1 px-3 py-2 border border-border-primary rounded-md text-sm bg-bg-secondary text-text-primary placeholder-text-tertiary focus:outline-none focus:ring-2 focus:ring-accent-primary focus:border-accent-primary transition-theme"
                 disabled={isLoading}
               />
               <button
                 onClick={handleAdd}
                 disabled={isLoading || !chatId.trim()}
-                className="px-4 py-2 rounded-md text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                style={buttonStyle}
+                className="px-4 py-2 rounded-md text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-theme bg-accent-primary text-white hover:bg-accent-hover"
               >
                 {isLoading ? '添加中...' : '添加'}
               </button>
@@ -171,22 +130,22 @@ const WhitelistManagement = ({ isOpen, onClose, onToast }) => {
           {/* 白名单列表 */}
           <div>
             <div className="flex items-center justify-between mb-3">
-              <h3 className="text-sm font-medium">当前白名单</h3>
+              <h3 className="text-sm font-medium text-text-primary transition-theme">当前白名单</h3>
               <button
                 onClick={handleLoadWhitelist}
                 disabled={isLoadingList}
-                className="text-xs px-2 py-1 rounded text-blue-600 hover:bg-blue-50 transition-colors"
+                className="text-xs px-2 py-1 rounded text-accent-primary hover:bg-accent-primary/10 transition-theme"
               >
                 {isLoadingList ? '刷新中...' : '刷新'}
               </button>
             </div>
 
             {isLoadingList ? (
-              <div className="text-center py-4 text-sm opacity-70">
+              <div className="text-center py-4 text-sm text-text-secondary transition-theme">
                 加载中...
               </div>
             ) : whitelist.items.length === 0 ? (
-              <div className="text-center py-4 text-sm opacity-70">
+              <div className="text-center py-4 text-sm text-text-secondary transition-theme">
                 暂无白名单项目
               </div>
             ) : (
@@ -194,22 +153,20 @@ const WhitelistManagement = ({ isOpen, onClose, onToast }) => {
                 {whitelist.items.map((item) => (
                   <div 
                     key={item}
-                    className="flex items-center justify-between p-3 rounded-md border"
-                    style={{ borderColor: themeParams?.hint_color + '20' || '#e5e7eb' }}
+                    className="flex items-center justify-between p-3 rounded-md border border-border-secondary bg-bg-secondary transition-theme"
                   >
                     <div>
-                      <div className="text-sm font-medium">
+                      <div className="text-sm font-medium text-text-primary transition-theme">
                         聊天ID: {item}
                       </div>
-                      <div className="text-xs opacity-70">
+                      <div className="text-xs text-text-secondary transition-theme">
                         {item < 0 ? '群组/频道' : '用户'}
                       </div>
                     </div>
                     <button
                       onClick={() => handleRemove(item)}
                       disabled={isLoading}
-                      className="px-3 py-1 rounded text-xs font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-                      style={dangerButtonStyle}
+                      className="px-3 py-1 rounded text-xs font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-theme bg-error text-white hover:bg-error/80"
                     >
                       移除
                     </button>
@@ -221,10 +178,10 @@ const WhitelistManagement = ({ isOpen, onClose, onToast }) => {
         </div>
 
         {/* 底部 */}
-        <div className="px-6 py-4 border-t border-gray-200">
+        <div className="px-6 py-4 border-t border-border-primary">
           <button
             onClick={onClose}
-            className="w-full px-4 py-2 rounded-md text-sm font-medium bg-gray-500 text-white hover:bg-gray-600 transition-colors"
+            className="w-full px-4 py-2 rounded-md text-sm font-medium bg-bg-secondary text-text-primary border border-border-primary hover:bg-bg-tertiary transition-theme"
           >
             关闭
           </button>

@@ -173,58 +173,29 @@ const CacheManagement = ({ isOpen, onClose, onToast }) => {
     }
   };
 
-  // 样式定义
-  const overlayStyle = {
-    backgroundColor: 'rgba(0, 0, 0, 0.5)',
-    backdropFilter: 'blur(4px)',
-  };
-
-  const modalStyle = isAvailable && themeParams ? {
-    backgroundColor: themeParams.bg_color,
-    color: themeParams.text_color,
-  } : {
-    backgroundColor: '#ffffff',
-    color: '#000000',
-  };
-
-  const buttonStyle = isAvailable && themeParams ? {
-    backgroundColor: themeParams.button_color,
-    color: themeParams.button_text_color,
-  } : {
-    backgroundColor: '#3b82f6',
-    color: '#ffffff',
-  };
-
-  const dangerButtonStyle = {
-    backgroundColor: '#dc2626',
-    color: '#ffffff',
-  };
-
   if (!isOpen) return null;
 
   return (
     <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-4"
-      style={overlayStyle}
+      className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/50 backdrop-blur-sm"
       onClick={onClose}
     >
       <div
-        className="w-full max-w-md rounded-lg shadow-xl max-h-[90vh] min-h-[300px] overflow-hidden flex flex-col"
-        style={modalStyle}
+        className="w-full max-w-md rounded-lg shadow-theme-xl max-h-[90vh] min-h-[300px] overflow-hidden flex flex-col bg-bg-primary border border-border-primary transition-theme"
         onClick={(e) => e.stopPropagation()}
       >
         {/* 头部 - 紧凑设计 */}
-        <div className="px-4 py-3 border-b border-gray-200 flex-shrink-0">
+        <div className="px-4 py-3 border-b border-border-primary flex-shrink-0">
           <div className="flex items-center justify-between">
-            <h2 className="text-base sm:text-lg font-semibold">缓存管理</h2>
+            <h2 className="text-base sm:text-lg font-semibold text-text-primary transition-theme">缓存管理</h2>
             <button
               onClick={onClose}
-              className="p-1 rounded-md hover:bg-gray-100 transition-colors"
+              className="p-1 rounded-md hover:bg-bg-tertiary transition-theme text-text-secondary"
             >
               <span className="text-lg">×</span>
             </button>
           </div>
-          <p className="text-xs sm:text-sm opacity-70 mt-1">
+          <p className="text-xs sm:text-sm text-text-secondary mt-1 transition-theme">
             选择要清除的缓存类型
           </p>
         </div>
@@ -232,7 +203,7 @@ const CacheManagement = ({ isOpen, onClose, onToast }) => {
         {/* 内容区域 - 可滚动，自适应高度 */}
         <div className="px-4 py-3 flex-1 overflow-y-auto min-h-0">
           {isLoadingTypes ? (
-            <div className="text-center py-4 text-sm opacity-70">
+            <div className="text-center py-4 text-sm text-text-secondary transition-theme">
               加载中...
             </div>
           ) : (
@@ -241,11 +212,11 @@ const CacheManagement = ({ isOpen, onClose, onToast }) => {
               <div className="flex items-center justify-between mb-4">
                 <button
                   onClick={toggleSelectAll}
-                  className="text-sm px-3 py-1 rounded text-blue-600 hover:bg-blue-50 transition-colors"
+                  className="text-sm px-3 py-1 rounded text-accent-primary hover:bg-accent-primary/10 transition-theme"
                 >
                   {selectedTypes.length === Object.keys(cacheTypes).length ? '全不选' : '全选'}
                 </button>
-                <span className="text-xs opacity-70">
+                <span className="text-xs text-text-secondary transition-theme">
                   已选择 {selectedTypes.length} / {Object.keys(cacheTypes).length}
                 </span>
               </div>
@@ -254,8 +225,7 @@ const CacheManagement = ({ isOpen, onClose, onToast }) => {
               {Object.entries(cacheTypes).map(([type, info]) => (
                 <div 
                   key={type}
-                  className="border rounded-md p-3 cursor-pointer hover:bg-gray-50 transition-colors"
-                  style={{ borderColor: themeParams?.hint_color + '20' || '#e5e7eb' }}
+                  className="border border-border-secondary rounded-md p-3 cursor-pointer hover:bg-bg-tertiary transition-theme"
                   onClick={() => toggleCacheType(type)}
                 >
                   <div className="flex items-start gap-3">
@@ -263,17 +233,17 @@ const CacheManagement = ({ isOpen, onClose, onToast }) => {
                       type="checkbox"
                       checked={selectedTypes.includes(type)}
                       onChange={() => toggleCacheType(type)}
-                      className="mt-1"
+                      className="mt-1 accent-accent-primary"
                     />
                     <div className="flex-1">
-                      <div className="text-sm font-medium">
+                      <div className="text-sm font-medium text-text-primary transition-theme">
                         {info.name}
                       </div>
-                      <div className="text-xs opacity-70 mt-1">
+                      <div className="text-xs text-text-secondary mt-1 transition-theme">
                         {info.description}
                       </div>
                       {info.warning && (
-                        <div className="text-xs text-orange-600 mt-1">
+                        <div className="text-xs text-warning mt-1 transition-theme">
                           ⚠️ {info.warning}
                         </div>
                       )}
@@ -286,23 +256,21 @@ const CacheManagement = ({ isOpen, onClose, onToast }) => {
         </div>
 
         {/* 底部操作 - 固定在底部，响应式布局 */}
-        <div className="px-4 py-3 border-t border-gray-200 flex-shrink-0">
+        <div className="px-4 py-3 border-t border-border-primary flex-shrink-0">
           <div className="space-y-2">
             {/* 清除按钮行 - 在超短屏幕上可以垂直排列 */}
             <div className="flex flex-col sm:flex-row gap-2">
               <button
                 onClick={showClearSelectedConfirm}
                 disabled={isLoading || selectedTypes.length === 0}
-                className="flex-1 px-3 py-2 rounded-md text-xs sm:text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors min-h-[36px]"
-                style={buttonStyle}
+                className="flex-1 px-3 py-2 rounded-md text-xs sm:text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-theme min-h-[36px] bg-accent-primary text-white hover:bg-accent-hover"
               >
                 {isLoading ? '清除中...' : '清除选中'}
               </button>
               <button
                 onClick={showClearAllConfirm}
                 disabled={isLoading}
-                className="flex-1 px-3 py-2 rounded-md text-xs sm:text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-colors min-h-[36px]"
-                style={dangerButtonStyle}
+                className="flex-1 px-3 py-2 rounded-md text-xs sm:text-sm font-medium disabled:opacity-50 disabled:cursor-not-allowed transition-theme min-h-[36px] bg-error text-white hover:bg-error/80"
               >
                 {isLoading ? '清除中...' : '清除全部'}
               </button>
@@ -310,7 +278,7 @@ const CacheManagement = ({ isOpen, onClose, onToast }) => {
             {/* 关闭按钮行 - 紧凑设计 */}
             <button
               onClick={onClose}
-              className="w-full px-3 py-1.5 rounded-md text-xs sm:text-sm font-medium bg-gray-500 text-white hover:bg-gray-600 transition-colors min-h-[32px]"
+              className="w-full px-3 py-1.5 rounded-md text-xs sm:text-sm font-medium bg-bg-secondary text-text-primary border border-border-primary hover:bg-bg-tertiary transition-theme min-h-[32px]"
             >
               关闭
             </button>
