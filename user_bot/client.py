@@ -576,9 +576,24 @@ class UserBotClient:
 
         在应用程序结束时调用，确保优雅地关闭连接
         """
-        if self._client:
+        if self._client and self._client.is_connected():
             logger.info("断开TelegramClient连接...")
-            await self._client.disconnect()
+            try:
+                # 给客户端时间来完成正在进行的操作
+                await asyncio.sleep(0.1)
+                # 使用优雅关闭，等待所有任务完成
+                await self._client.disconnect()
+                logger.info("TelegramClient连接已关闭")
+            except Exception as e:
+                logger.error(f"断开TelegramClient连接时出错: {str(e)}")
+                # 如果优雅关闭失败，强制关闭
+                try:
+                    if hasattr(self._client, '_disconnect'):
+                        await self._client._disconnect()
+                except Exception as force_e:
+                    logger.error(f"强制断开连接也失败: {str(force_e)}")
+        elif self._client:
+            logger.info("TelegramClient 已经断开连接")
             
     async def run(self) -> None:
         """
@@ -603,9 +618,21 @@ class UserBotClient:
         except asyncio.CancelledError:
             # 优雅地处理任务取消
             logger.info("UserBotClient 任务被取消，正在关闭...")
+            # 确保客户端断开连接
+            if self._client and self._client.is_connected():
+                try:
+                    await self._client.disconnect()
+                except Exception as e:
+                    logger.error(f"在任务取消时断开客户端连接失败: {str(e)}")
             # 不重新抛出异常，让任务安静地结束
         except Exception as e:
             logger.error(f"UserBotClient 运行时出错: {str(e)}")
+            # 确保客户端断开连接
+            if self._client and self._client.is_connected():
+                try:
+                    await self._client.disconnect()
+                except Exception as disconnect_e:
+                    logger.error(f"在异常处理时断开客户端连接失败: {str(disconnect_e)}")
             raise
         
     def reload_config(self) -> None:

@@ -28,6 +28,8 @@ tasks: Dict[str, asyncio.Task] = {}
 fastapi_server: Optional[uvicorn.Server] = None
 # User Bot 重启事件
 userbot_restart_event: asyncio.Event = asyncio.Event()
+# 关闭事件，用于优雅关闭
+shutdown_event: asyncio.Event = asyncio.Event()
 
 def setup_logging(level=logging.INFO) -> None:
     """
@@ -57,6 +59,18 @@ def setup_logging(level=logging.INFO) -> None:
     
     logger.info("日志系统初始化完成")
 
+def signal_handler(signum, frame):
+    """
+    信号处理器，用于优雅关闭
+    """
+    logger = logging.getLogger(__name__)
+    signal_name = signal.Signals(signum).name
+    logger.info(f"接收到 {signal_name} 信号，开始优雅关闭...")
+    
+    # 设置关闭事件
+    if not shutdown_event.is_set():
+        shutdown_event.set()
+
 async def shutdown_clients() -> None:
     """
     关闭所有客户端连接
@@ -65,16 +79,9 @@ async def shutdown_clients() -> None:
     """
     logger = logging.getLogger(__name__)
     
-    # 取消所有正在运行的任务
-    for name, task in tasks.items():
-        if not task.done():
-            logger.debug(f"取消任务: {name}")
-            task.cancel()
+    logger.info("开始关闭所有服务...")
     
-    # 等待所有任务完成取消
-    if tasks:
-        await asyncio.gather(*tasks.values(), return_exceptions=True)
-    
+    # 首先优雅地关闭客户端连接，这样可以让内部任务自然结束
     # 断开UserBot连接
     if user_bot_client is not None:
         logger.info("正在断开UserBot连接...")
@@ -92,6 +99,27 @@ async def shutdown_clients() -> None:
             logger.info("SearchBot已断开连接")
         except Exception as e:
             logger.error(f"断开SearchBot连接时出错: {str(e)}")
+    
+    # 给一些时间让所有任务自然结束
+    await asyncio.sleep(0.5)
+    
+    # 然后取消剩余的正在运行的任务
+    for name, task in tasks.items():
+        if not task.done():
+            logger.debug(f"取消任务: {name}")
+            task.cancel()
+    
+    # 等待所有任务完成取消
+    if tasks:
+        try:
+            await asyncio.wait_for(
+                asyncio.gather(*tasks.values(), return_exceptions=True),
+                timeout=5.0  # 设置超时时间避免无限等待
+            )
+        except asyncio.TimeoutError:
+            logger.warning("等待任务取消超时，强制退出")
+        except Exception as e:
+            logger.error(f"等待任务取消时出错: {str(e)}")
     
     # 关闭FastAPI服务器
     if fastapi_server is not None:
@@ -207,6 +235,22 @@ async def async_main() -> None:
         )
         logger.info("已启动所有服务任务")
         
+        # 创建一个监听关闭信号的任务
+        async def wait_for_shutdown():
+            await shutdown_event.wait()
+            logger.info("接收到关闭信号，开始关闭所有任务...")
+            # 取消所有任务
+            for name, task in tasks.items():
+                if not task.done():
+                    logger.info(f"取消任务: {name}")
+                    task.cancel()
+        
+        # 将关闭监听任务也加入到任务列表中
+        tasks["ShutdownMonitor"] = asyncio.create_task(
+            wait_for_shutdown(),
+            name="ShutdownMonitor"
+        )
+        
         # 等待所有任务完成
         # 使用return_exceptions=True确保即使某个任务抛出异常，其他任务也不会被取消
         await asyncio.gather(*tasks.values(), return_exceptions=True)
@@ -224,9 +268,12 @@ def setup_signal_handlers() -> None:
     
     捕获SIGINT和SIGTERM信号，确保程序能够优雅地关闭
     """
+    # 设置SIGINT处理器 (Ctrl+C)
+    signal.signal(signal.SIGINT, signal_handler)
+    
     # 仅在非Windows平台上设置SIGTERM处理器
     if sys.platform != 'win32':
-        signal.signal(signal.SIGTERM, lambda sig, frame: sys.exit(0))
+        signal.signal(signal.SIGTERM, signal_handler)
 
 async def main() -> None:
     """
@@ -249,15 +296,15 @@ if __name__ == "__main__":
     setup_signal_handlers()
     
     try:
-        # 启动主异步函数
+        # 运行主程序
         asyncio.run(main())
     except KeyboardInterrupt:
-        logger.info("检测到键盘中断，正在优雅关闭客户端...")
+        logger.info("程序被用户中断")
         print("\n正在关闭服务，请稍候...")
-        # 注意: 当KeyboardInterrupt发生时，asyncio.run会取消所有的任务
-        # 并且会调用main()中的finally块，所以shutdown_clients()会被自动调用
     except Exception as e:
-        logger.exception(f"程序运行时发生错误: {str(e)}")
+        logger.error(f"程序运行时发生未处理的错误: {str(e)}")
+        sys.exit(1)
     finally:
-        logger.info("服务已完全关闭")
-        print("Telegram中文历史消息搜索服务已关闭。")
+        logger.info("Telegram中文历史消息搜索服务已关闭")
+        print("服务已完全关闭。")
+

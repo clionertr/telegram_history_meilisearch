@@ -210,6 +210,10 @@ class SearchBot:
             # 保持运行直到断开连接
             await self.client.run_until_disconnected()
             
+        except asyncio.CancelledError:
+            # 优雅地处理任务取消
+            logger.info("Search Bot 任务被取消，正在关闭...")
+            # 不重新抛出异常，让任务安静地结束
         except ApiIdInvalidError:
             logger.error("API ID 或 API Hash 无效，请检查配置")
             raise
@@ -231,7 +235,22 @@ class SearchBot:
         """
         if self.client and self.client.is_connected():
             logger.info("断开 Search Bot 连接...")
-            await self.client.disconnect()
+            try:
+                # 给客户端时间来完成正在进行的操作
+                await asyncio.sleep(0.1)
+                # 使用优雅关闭，等待所有任务完成
+                await self.client.disconnect()
+                logger.info("Search Bot 连接已关闭")
+            except Exception as e:
+                logger.error(f"断开 Search Bot 连接时出错: {str(e)}")
+                # 如果优雅关闭失败，强制关闭
+                try:
+                    if hasattr(self.client, '_disconnect'):
+                        await self.client._disconnect()
+                except Exception as force_e:
+                    logger.error(f"强制断开 Search Bot 连接也失败: {str(force_e)}")
+        elif self.client:
+            logger.info("Search Bot 已经断开连接")
 
 
 # 主程序入口
