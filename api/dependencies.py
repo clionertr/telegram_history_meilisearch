@@ -61,9 +61,9 @@ def get_config_manager() -> ConfigManager:
     logger = logging.getLogger(__name__)
     
     # 配置文件路径
-    env_path = os.getenv("ENV_PATH", ".env")
-    config_path = os.getenv("CONFIG_PATH", "config.ini")
-    whitelist_path = os.getenv("WHITELIST_PATH", "whitelist.json")
+    env_path = os.getenv("ENV_PATH", "config/.env")
+    config_path = os.getenv("CONFIG_PATH", "config/config.ini")
+    whitelist_path = os.getenv("WHITELIST_PATH", "config/whitelist.json")
     
     logger.info(f"创建 ConfigManager 实例，使用配置文件 {config_path} 和白名单文件 {whitelist_path}")
     

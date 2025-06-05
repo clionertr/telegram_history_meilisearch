@@ -205,10 +205,16 @@ project_root/
 ├── tests/                        # 测试文件
 │   ├── unit/
 │   └── integration/
-├── .env.example                  # 环境变量模板
-├── .env                          # 环境变量 (本地开发，不提交到git)
-├── config.ini.example            # (可选) 配置文件模板
-├── config.ini                    # (可选) 配置文件
+├── config/                       # 配置文件目录
+│   ├── .env.example              # 环境变量模板
+│   ├── .env                      # 环境变量 (本地开发，不提交到git)
+│   ├── .env.userbot.example      # User Bot 环境变量模板
+│   ├── .env.userbot              # User Bot 环境变量 (不提交到git)
+│   ├── config.ini.example        # 配置文件模板
+│   ├── config.ini                # 配置文件
+│   ├── whitelist.json.example    # 白名单文件模板
+│   ├── whitelist.json            # 白名单文件 (不提交到git)
+│   └── sync_points.json          # 同步点文件 (不提交到git)
 ├── requirements.txt              # Python 依赖
 ├── Dockerfile                    # Docker 配置文件
 ├── docker-compose.yml            # Docker Compose (用于本地开发 Meilisearch 和应用)
@@ -340,7 +346,7 @@ frontend/
         *   执行搜索并返回结果。
     *   `delete_message(message_id)`: (可选) 删除索引中的消息。
 *   **`config_manager.py`**:
-    *   加载 `.env` 和/或 `config.ini`。
+    *   加载 `config/.env` 和/或 `config/config.ini`。
     *   提供获取配置项（API Key, Token, 白名单列表等）的方法。
     *   `get_whitelist()`: 返回白名单 Chat ID 列表。
     *   `add_to_whitelist(chat_id)`: 添加到白名单并保存配置。
@@ -472,7 +478,7 @@ frontend/
 *   **环境变量管理**:
     *   严格使用环境变量配置敏感信息 (API Keys, Tokens, Meilisearch Master Key)。
     *   Docker: 通过 `docker-compose.yml` 或 `docker run -e` 传递。
-    *   服务器: 设置系统环境变量或使用 `.env` 文件 (确保 `.env` 不被提交到 Git)。
+    *   服务器: 设置系统环境变量或使用 `config/.env` 文件 (确保 `config/.env` 不被提交到 Git)。
 *   **CI/CD (持续集成/持续部署)**:
     *   **GitHub Actions (推荐)** / GitLab CI / Jenkins。
     *   自动化流程：代码提交 -> 运行测试 (linting, unit, integration) -> 构建 Docker 镜像 -> 推送镜像到 Docker Hub/GHCR -> 部署到服务器/PaaS。

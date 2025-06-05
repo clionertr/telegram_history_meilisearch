@@ -37,8 +37,8 @@
             *   Python 版本将通过项目根目录下的 pyproject.toml 文件中的 `requires-python` 字段（例如 `requires-python = ">=3.9"`）进行约束，并由 `uv` 在创建虚拟环境时遵循此设置。
         *   **Node.js (前端 - 预备):**
             *   (此阶段仅做环境检查，实际安装在前端阶段进行) 检查 Node.js 和 npm/yarn 是否已安装。
-        *   创建 `.env.example` 文件，列出所有需要的环境变量（如 `TELEGRAM_API_ID`, `TELEGRAM_API_HASH`, `BOT_TOKEN`, `MEILISEARCH_HOST`, `MEILISEARCH_API_KEY` 等）。
-        *   创建 `.env` 文件，并由 AI 填充占位符值（对于敏感信息，AI 可以生成安全的随机值或提示用户后续手动填写）。
+        *   创建 `config/.env.example` 文件，列出所有需要的环境变量（如 `TELEGRAM_API_ID`, `TELEGRAM_API_HASH`, `BOT_TOKEN`, `MEILISEARCH_HOST`, `MEILISEARCH_API_KEY` 等）。
+        *   创建 `config/.env` 文件，并由 AI 填充占位符值（对于敏感信息，AI 可以生成安全的随机值或提示用户后续手动填写）。
         *   记录所有环境搭建步骤和命令到 `memory-bank/activeContext.md`。
 
 ### 阶段 1: 后端核心功能开发与测试 (AI 执行)
@@ -47,10 +47,10 @@
 
 1.  **任务：** `core/config_manager.py` 开发。
     *   **AI 行动：**
-        *   实现加载 `.env` 和 `config.ini` (如果选择使用) 的功能。
+        *   实现加载 `config/.env` 和 `config/config.ini` (如果选择使用) 的功能。
         *   提供获取配置项的方法。
         *   实现白名单的读取、添加、移除逻辑 (初期可基于 JSON 文件或 Python 列表存储在配置文件中)。
-        *   实现最旧同步时间（`oldest_sync_timestamp`）的读取和管理逻辑。该配置可以全局生效，或针对特定 chat_id 生效，存储于 `whitelist.json`。
+        *   实现最旧同步时间（`oldest_sync_timestamp`）的读取和管理逻辑。该配置可以全局生效，或针对特定 chat_id 生效，存储于 `config/whitelist.json`。
         *   编写单元测试。
         *   记录到 `memory-bank/activeContext.md`。
 2.  **任务：** `core/models.py` 开发。

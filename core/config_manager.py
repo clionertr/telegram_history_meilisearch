@@ -43,19 +43,19 @@ class ConfigManager:
     """
 
     def __init__(self,
-                 env_path: str = ".env",
-                 config_path: str = "config.ini",
-                 whitelist_path: str = "whitelist.json",
-                 userbot_env_path: str = ".env.userbot",
+                 env_path: str = "config/.env",
+                 config_path: str = "config/config.ini",
+                 whitelist_path: str = "config/whitelist.json",
+                 userbot_env_path: str = "config/.env.userbot",
                  create_if_not_exists: bool = True) -> None:
         """
         初始化配置管理器
 
         Args:
-            env_path: .env文件的路径，默认为项目根目录下的.env
-            config_path: 配置文件的路径，默认为项目根目录下的config.ini
-            whitelist_path: 白名单文件的路径，默认为项目根目录下的whitelist.json
-            userbot_env_path: User Bot 环境变量文件的路径，默认为项目根目录下的.env.userbot
+            env_path: .env文件的路径，默认为config/.env
+            config_path: 配置文件的路径，默认为config/config.ini
+            whitelist_path: 白名单文件的路径，默认为config/whitelist.json
+            userbot_env_path: User Bot 环境变量文件的路径，默认为config/.env.userbot
             create_if_not_exists: 如果配置文件不存在，是否创建默认文件，默认为True
         """
         self.logger = logging.getLogger(__name__)
@@ -82,6 +82,12 @@ class ConfigManager:
         self.load_env()
         self.load_userbot_env()
         
+        # 确保config目录存在
+        config_dir = os.path.dirname(config_path)
+        if config_dir and not os.path.exists(config_dir):
+            os.makedirs(config_dir, exist_ok=True)
+            self.logger.info(f"已创建配置目录 {config_dir}")
+
         # 文件不存在且需要创建默认文件
         if create_if_not_exists:
             if not os.path.exists(config_path):
@@ -692,17 +698,23 @@ class SyncPointManager:
     3. 更新同步点信息
     """
     
-    def __init__(self, sync_points_path: str = "sync_points.json") -> None:
+    def __init__(self, sync_points_path: str = "config/sync_points.json") -> None:
         """
         初始化同步点管理器
-        
+
         Args:
-            sync_points_path: 同步点文件的路径，默认为项目根目录下的sync_points.json
+            sync_points_path: 同步点文件的路径，默认为config/sync_points.json
         """
         self.logger = logging.getLogger(__name__)
         self.sync_points_path = sync_points_path
         self.sync_points: Dict[str, Dict[str, Any]] = {}
-        
+
+        # 确保同步点文件的目录存在
+        sync_dir = os.path.dirname(sync_points_path)
+        if sync_dir and not os.path.exists(sync_dir):
+            os.makedirs(sync_dir, exist_ok=True)
+            self.logger.info(f"已创建同步点目录 {sync_dir}")
+
         # 加载同步点信息
         self.load_sync_points()
         

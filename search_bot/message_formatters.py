@@ -263,18 +263,18 @@ def format_help_message() -> str:
 **配置文件说明:**
 
 本系统使用多个配置文件来管理不同的设置：
-1.  **`config.ini`**: 存放通用的、非敏感的应用程序配置。
-2.  **`.env`**: 存放全局的、敏感的配置信息和环境变量，例如 Search Bot 的 Token、MeiliSearch API Key、管理员 ID 等。**此文件不应提交到版本控制。**
-3.  **`.env.userbot`**: 专门存放 User Bot 的配置信息，特别是 API ID 和 API Hash。**此文件不应提交到版本控制。** `/set_userbot_config` 命令会修改此文件。
+1.  **`config/config.ini`**: 存放通用的、非敏感的应用程序配置。
+2.  **`config/.env`**: 存放全局的、敏感的配置信息和环境变量，例如 Search Bot 的 Token、MeiliSearch API Key、管理员 ID 等。**此文件不应提交到版本控制。**
+3.  **`config/.env.userbot`**: 专门存放 User Bot 的配置信息，特别是 API ID 和 API Hash。**此文件不应提交到版本控制。** `/set_userbot_config` 命令会修改此文件。
 
 **配置加载优先级:**
 - **User Bot 特定配置** (如 `USER_API_ID`):
-  1. `.env.userbot` (最高)
-  2. `.env` (作为环境变量)
-  3. `config.ini` (最低)
+  1. `config/.env.userbot` (最高)
+  2. `config/.env` (作为环境变量)
+  3. `config/config.ini` (最低)
 - **其他配置**:
-  1. `.env` (作为环境变量) (最高)
-  2. `config.ini` (最低)
+  1. `config/.env` (作为环境变量) (最高)
+  2. `config/config.ini` (最低)
 
 ---
 
