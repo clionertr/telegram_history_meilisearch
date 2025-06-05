@@ -1,5 +1,5 @@
 import React from 'react';
-import { getDialogs, getCacheStatus, refreshCache, clearAvatarsCache } from '../services/api.js';
+import { getDialogs, searchDialogs, getCacheStatus, refreshCache, clearAvatarsCache } from '../services/api.js';
 
 // 事件监听器管理
 class EventEmitter {
@@ -51,7 +51,14 @@ class SessionsStore extends EventEmitter {
         cache_valid: false,
         cache_age_seconds: null,
         cache_ttl_seconds: 300
-      }
+      },
+      // 搜索相关状态
+      searchQuery: '',
+      searchTypeFilter: '',
+      isSearchMode: false,
+      searchResults: [],
+      isSearching: false,
+      searchError: null
     };
 
     // 全局会话缓存
@@ -80,7 +87,12 @@ class SessionsStore extends EventEmitter {
 
   // 清除错误状态
   clearError() {
-    this.setState({ error: null });
+    this.setState({ error: null, searchError: null });
+  }
+
+  // 清除搜索错误
+  clearSearchError() {
+    this.setState({ searchError: null });
   }
 
   // 获取缓存状态
@@ -258,6 +270,113 @@ class SessionsStore extends EventEmitter {
     }
   }
 
+  // 搜索会话
+  async searchSessions(query, typeFilter = '', page = 1) {
+    try {
+      this.clearSearchError();
+      
+      // 如果查询为空，退出搜索模式
+      if (!query || query.trim() === '') {
+        this.exitSearchMode();
+        return;
+      }
+
+      this.setState({ 
+        isSearching: true,
+        searchQuery: query.trim(),
+        searchTypeFilter: typeFilter,
+        isSearchMode: true
+      });
+
+      console.log(`搜索会话: "${query}", 类型过滤: "${typeFilter}", 页码: ${page}`);
+
+      const searchResults = await searchDialogs(query.trim(), page, this.state.pageSize, typeFilter || null);
+      
+      if (!searchResults) {
+        throw new Error('搜索返回空结果');
+      }
+
+      // 更新搜索结果
+      this.setState({
+        searchResults: searchResults.items || [],
+        sessions: searchResults.items || [], // 当前显示的会话列表
+        totalSessions: searchResults.total || 0,
+        currentPage: searchResults.page || page,
+        totalPages: searchResults.total_pages || 0
+      });
+
+      console.log(`搜索完成: 找到 ${searchResults.total || 0} 个结果`);
+
+    } catch (err) {
+      console.error('搜索会话失败:', err);
+      this.setState({ 
+        searchError: err.message || '搜索失败',
+        searchResults: [],
+        sessions: [],
+        totalSessions: 0,
+        totalPages: 0
+      });
+    } finally {
+      this.setState({ isSearching: false });
+    }
+  }
+
+  // 搜索模式下的分页
+  async searchChangePage(page) {
+    if (!this.state.isSearchMode || !this.state.searchQuery) {
+      return;
+    }
+
+    await this.searchSessions(this.state.searchQuery, this.state.searchTypeFilter, page);
+  }
+
+  // 退出搜索模式
+  exitSearchMode() {
+    this.setState({
+      isSearchMode: false,
+      searchQuery: '',
+      searchTypeFilter: '',
+      searchResults: [],
+      searchError: null
+    });
+
+    // 恢复到正常浏览模式
+    if (this.isCacheInitialized) {
+      this.updateCurrentPageSessions();
+    } else {
+      // 如果缓存未初始化，重新加载
+      this.fetchSessions(1);
+    }
+  }
+
+  // 设置类型过滤器
+  setTypeFilter(typeFilter) {
+    if (this.state.isSearchMode && this.state.searchQuery) {
+      // 在搜索模式下，重新搜索
+      this.searchSessions(this.state.searchQuery, typeFilter, 1);
+    } else {
+      // 在普通模式下，只更新状态
+      this.setState({ searchTypeFilter: typeFilter });
+    }
+  }
+
+  // 获取搜索建议（这里可以扩展为实际的搜索建议功能）
+  getSearchSuggestions(query) {
+    if (!query || query.length < 2) {
+      return [];
+    }
+
+    // 从缓存的会话中获取匹配的建议
+    const suggestions = this.allSessionsCache
+      .filter(session => 
+        session.name && session.name.toLowerCase().includes(query.toLowerCase())
+      )
+      .slice(0, 5) // 最多5个建议
+      .map(session => session.name);
+
+    return [...new Set(suggestions)]; // 去重
+  }
+
   // 获取缓存统计信息
   getCacheInfo() {
     return {
@@ -285,13 +404,19 @@ export const {
   getState,
   setState,
   clearError,
+  clearSearchError,
   fetchCacheStatus,
   fetchSessions,
   changePage,
   refreshSessionsCache,
   clearAvatarCache,
   getCacheInfo,
-  fetchSessionsFast
+  fetchSessionsFast,
+  searchSessions,
+  searchChangePage,
+  exitSearchMode,
+  setTypeFilter,
+  getSearchSuggestions
 } = sessionsStore;
 
 // 创建React Hook
@@ -311,6 +436,13 @@ export const useSessionsStore = () => {
     clearAvatarCache: sessionsStore.clearAvatarCache.bind(sessionsStore),
     fetchCacheStatus: sessionsStore.fetchCacheStatus.bind(sessionsStore),
     getCacheInfo: sessionsStore.getCacheInfo.bind(sessionsStore),
-    fetchSessionsFast: sessionsStore.fetchSessionsFast.bind(sessionsStore)
+    fetchSessionsFast: sessionsStore.fetchSessionsFast.bind(sessionsStore),
+    // 搜索相关方法
+    searchSessions: sessionsStore.searchSessions.bind(sessionsStore),
+    searchChangePage: sessionsStore.searchChangePage.bind(sessionsStore),
+    exitSearchMode: sessionsStore.exitSearchMode.bind(sessionsStore),
+    setTypeFilter: sessionsStore.setTypeFilter.bind(sessionsStore),
+    getSearchSuggestions: sessionsStore.getSearchSuggestions.bind(sessionsStore),
+    clearSearchError: sessionsStore.clearSearchError.bind(sessionsStore)
   };
 };

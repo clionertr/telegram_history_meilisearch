@@ -7,6 +7,7 @@ Meilisearch 服务模块
 3. 索引消息（单条或批量）
 4. 搜索消息
 5. 删除消息（可选）
+6. 会话索引与搜索功能
 """
 
 import logging
@@ -23,6 +24,7 @@ class MeiliSearchService:
     Meilisearch 服务类
     
     负责与 Meilisearch 搜索引擎交互，提供消息索引、搜索和管理功能
+    支持会话索引与搜索功能
     """
     
     def __init__(self, host: str, api_key: Optional[str] = None, index_name: str = "telegram_messages") -> None:
@@ -38,17 +40,23 @@ class MeiliSearchService:
         self.host = host
         self.api_key = api_key
         self.index_name = index_name
+        self.sessions_index_name = "telegram_sessions"  # 会话索引名称
         
         # 初始化 Meilisearch 客户端
         self.client = meilisearch.Client(self.host, self.api_key)
         self.logger.info(f"已连接到 Meilisearch 服务: {self.host}")
         
-        # 获取或创建索引
+        # 获取或创建消息索引
         self.index = self.client.index(self.index_name)
-        self.logger.info(f"使用索引: {self.index_name}")
+        self.logger.info(f"使用消息索引: {self.index_name}")
+        
+        # 获取或创建会话索引
+        self.sessions_index = self.client.index(self.sessions_index_name)
+        self.logger.info(f"使用会话索引: {self.sessions_index_name}")
         
         # 确保索引设置正确
         self.ensure_index_setup()
+        self.ensure_sessions_index_setup()
     
     def ensure_index_setup(self) -> None:
         """
@@ -166,6 +174,109 @@ class MeiliSearchService:
         
         # 日志记录关于停用词和同义词
         self.logger.info("注意: stopWords(停用词)和synonyms(同义词)配置不在初始设置中，可通过单独的方法配置")
+    
+    def ensure_sessions_index_setup(self) -> None:
+        """
+        确保会话索引存在并配置正确
+        
+        配置会话索引的可搜索属性、可过滤属性、可排序属性和排序规则。
+        """
+        # 获取所有索引
+        indexes = self.client.get_indexes()
+        
+        # 兼容不同版本 Meilisearch API 的返回结构
+        if hasattr(indexes, 'results'):
+            # 旧版 API 结构
+            index_list = indexes.results
+            index_names = [index.uid for index in index_list]
+        else:
+            # 新版 API 结构 - indexes 是字典
+            self.logger.debug(f"Meilisearch get_indexes 返回的是字典: {indexes}")
+            
+            # 尝试获取索引列表 - 可能存在于不同的键下或直接是列表
+            if isinstance(indexes, list):
+                index_list = indexes
+            elif isinstance(indexes, dict):
+                # 尝试常见的键名
+                if 'results' in indexes:
+                    index_list = indexes['results']
+                elif 'items' in indexes:
+                    index_list = indexes['items']
+                else:
+                    # 如果没有找到预期的键，可能索引列表直接就是字典值
+                    self.logger.warning("无法确定 Meilisearch 索引列表位置，尝试使用整个返回值")
+                    index_list = indexes
+            else:
+                self.logger.warning(f"Meilisearch get_indexes 返回了未知类型: {type(indexes)}")
+                index_list = []
+            
+            # 从索引列表中提取 uid - 处理可能每个索引是对象或字典的情况
+            index_names = []
+            for index_item in index_list:
+                if hasattr(index_item, 'uid'):
+                    index_names.append(index_item.uid)
+                elif isinstance(index_item, dict) and 'uid' in index_item:
+                    index_names.append(index_item['uid'])
+        
+        # 检查是否需要创建会话索引
+        if self.sessions_index_name not in index_names:
+            self.logger.info(f"会话索引 {self.sessions_index_name} 不存在，正在创建...")
+            # 显式指定 id 字段为主键
+            self.client.create_index(self.sessions_index_name, {'primaryKey': 'id'})
+            self.logger.info(f"已指定 'id' 为会话索引的主键")
+        else:
+            # 确保已有索引的主键设置正确
+            try:
+                index_info = self.client.get_index(self.sessions_index_name)
+                if not hasattr(index_info, 'primary_key') or index_info.primary_key != 'id':
+                    self.logger.warning(f"会话索引 {self.sessions_index_name} 的主键不是 'id'，尝试更新")
+            except Exception as e:
+                self.logger.warning(f"检查会话索引主键时出错: {str(e)}")
+        
+        # 配置会话索引设置
+        # 可搜索属性 - name 优先级最高
+        self.sessions_index.update_searchable_attributes([
+            "name",
+            "id"
+        ])
+        self.logger.info("已配置会话索引可搜索属性: ['name', 'id']")
+        
+        # 可过滤属性
+        self.sessions_index.update_filterable_attributes([
+            "type",
+            "unread_count"
+        ])
+        self.logger.info("已配置会话索引可过滤属性: ['type', 'unread_count']")
+        
+        # 可排序属性
+        self.sessions_index.update_sortable_attributes([
+            "date",
+            "unread_count",
+            "name"
+        ])
+        self.logger.info("已配置会话索引可排序属性: ['date', 'unread_count', 'name']")
+        
+        # 排序规则
+        self.sessions_index.update_ranking_rules([
+            "words",
+            "typo",
+            "proximity",
+            "attribute",
+            "sort",
+            "exactness"
+        ])
+        self.logger.info("已配置会话索引排序规则")
+        
+        # 配置高亮属性
+        self.sessions_index.update_displayed_attributes([
+            "id",
+            "name",
+            "type",
+            "unread_count",
+            "date",
+            "avatar_key"
+        ])
+        self.logger.info("已配置会话索引显示属性")
     
     def index_message(self, message_doc: MeiliMessageDoc) -> dict:
         """
@@ -464,5 +575,189 @@ class MeiliSearchService:
             task_id = result['taskUid']
             
         self.logger.info(f"已更新同义词词典，词组数: {len(synonyms)}, 任务ID: {task_id}")
+        
+        return result
+
+    def index_session(self, session_doc: Dict[str, Any]) -> dict:
+        """
+        索引单个会话
+        
+        Args:
+            session_doc: 会话文档字典，包含id, name, type, unread_count, date, avatar_key等字段
+            
+        Returns:
+            Meilisearch 的响应字典，通常包含任务信息
+        """
+        # 添加到 Meilisearch 会话索引
+        result = self.sessions_index.add_documents([session_doc])
+        
+        # 适配新版 Meilisearch API 返回值处理
+        task_id = "unknown"
+        if hasattr(result, 'task_uid'):
+            task_id = result.task_uid
+        elif hasattr(result, 'uid'):
+            task_id = result.uid
+        elif isinstance(result, dict) and 'taskUid' in result:
+            # 兼容旧版 API
+            task_id = result['taskUid']
+            
+        self.logger.debug(f"已索引会话: {session_doc.get('id')}, 任务ID: {task_id}")
+        
+        return result
+
+    def index_sessions_bulk(self, session_docs: List[Dict[str, Any]]) -> dict:
+        """
+        批量索引会话
+        
+        Args:
+            session_docs: 会话文档列表
+            
+        Returns:
+            Meilisearch 的响应字典，通常包含任务信息
+        """
+        if not session_docs:
+            self.logger.warning("会话文档列表为空，跳过索引")
+            return {}
+        
+        # 批量添加到 Meilisearch 会话索引
+        result = self.sessions_index.add_documents(session_docs)
+        
+        # 适配新版 Meilisearch API 返回值处理
+        task_id = "unknown"
+        if hasattr(result, 'task_uid'):
+            task_id = result.task_uid
+        elif hasattr(result, 'uid'):
+            task_id = result.uid
+        elif isinstance(result, dict) and 'taskUid' in result:
+            # 兼容旧版 API
+            task_id = result['taskUid']
+            
+        self.logger.info(f"已批量索引 {len(session_docs)} 个会话, 任务ID: {task_id}")
+        
+        return result
+
+    def search_sessions(self, query: str, session_types: Optional[List[str]] = None, 
+                       page: int = 1, hits_per_page: int = 20,
+                       sort: Optional[List[str]] = None) -> dict:
+        """
+        搜索会话
+        
+        Args:
+            query: 搜索关键词，支持搜索会话名称和ID
+            session_types: 会话类型过滤，如 ["user", "group", "channel"]
+            page: 页码，从1开始
+            hits_per_page: 每页结果数，默认20
+            sort: 排序规则，如 ["date:desc", "unread_count:desc"]
+            
+        Returns:
+            搜索结果字典，包含hits、estimatedTotalHits等信息
+        """
+        filter_parts = []
+        
+        # 处理会话类型过滤
+        if session_types:
+            # 验证会话类型的有效性
+            valid_session_types = {"user", "group", "channel"}
+            invalid_types = [t for t in session_types if t not in valid_session_types]
+            if invalid_types:
+                self.logger.warning(f"发现无效的会话类型: {invalid_types}, 有效类型: {list(valid_session_types)}")
+            
+            valid_types = [t for t in session_types if t in valid_session_types]
+            if valid_types:
+                type_filters = [f'type = "{session_type}"' for session_type in valid_types]
+                filter_parts.append(f"({' OR '.join(type_filters)})")
+        
+        # 构建搜索参数
+        search_params: Dict[str, Any] = {
+            "page": page,
+            "hitsPerPage": hits_per_page,
+            "attributesToHighlight": ["name"]
+        }
+        
+        # 添加组合后的过滤条件
+        if filter_parts:
+            combined_filters = " AND ".join(filter_parts)
+            search_params["filter"] = combined_filters
+            self.logger.debug(f"会话搜索过滤条件: {combined_filters}")
+        
+        # 添加排序规则（默认按日期降序）
+        if sort:
+            search_params["sort"] = sort
+        else:
+            search_params["sort"] = ["date:desc"]
+        
+        # 执行搜索
+        self.logger.debug(f"执行会话搜索: 关键词='{query}', 参数={search_params}")
+        results = self.sessions_index.search(query, search_params)
+        
+        # 记录原始搜索结果以便排查问题
+        self.logger.debug(f"Meilisearch 会话搜索原始结果: {results}")
+        
+        # 处理不同版本 Meilisearch API 的返回结构
+        if not isinstance(results, dict):
+            self.logger.debug(f"会话搜索结果不是字典，类型: {type(results)}")
+            if hasattr(results, '__dict__'):
+                results_dict = dict(results.__dict__)
+            else:
+                results_dict = {}
+                for attr in ['hits', 'estimatedTotalHits', 'processingTimeMs', 'query']:
+                    if hasattr(results, attr):
+                        results_dict[attr] = getattr(results, attr)
+        else:
+            results_dict = results
+        
+        # 确保结果包含所有必要的键
+        if 'hits' not in results_dict:
+            results_dict['hits'] = []
+        if 'estimatedTotalHits' not in results_dict:
+            if hasattr(results, 'estimated_total_hits'):
+                results_dict['estimatedTotalHits'] = results.estimated_total_hits
+            elif hasattr(results, 'nb_hits'):
+                results_dict['estimatedTotalHits'] = results.nb_hits
+            elif hasattr(results, 'totalHits'):
+                results_dict['estimatedTotalHits'] = results.totalHits
+            elif 'totalHits' in results_dict:
+                results_dict['estimatedTotalHits'] = results_dict['totalHits']
+            else:
+                results_dict['estimatedTotalHits'] = len(results_dict['hits'])
+        
+        if 'processingTimeMs' not in results_dict:
+            if hasattr(results, 'processing_time_ms'):
+                results_dict['processingTimeMs'] = results.processing_time_ms
+            else:
+                results_dict['processingTimeMs'] = 0
+        
+        if 'query' not in results_dict:
+            results_dict['query'] = query
+        
+        # 记录会话搜索结果信息
+        self.logger.info(
+            f"会话搜索 '{query}' 找到 {results_dict['estimatedTotalHits']} 个结果，"
+            f"处理时间: {results_dict['processingTimeMs']}ms，"
+            f"当前页码: {search_params['page']}，"
+            f"实际返回结果数: {len(results_dict['hits'])}"
+        )
+        
+        return results_dict
+
+    def clear_sessions_index(self) -> dict:
+        """
+        清空会话索引
+        
+        Returns:
+            Meilisearch 的响应字典
+        """
+        result = self.sessions_index.delete_all_documents()
+        
+        # 适配新版 Meilisearch API 返回值处理
+        task_id = "unknown"
+        if hasattr(result, 'task_uid'):
+            task_id = result.task_uid
+        elif hasattr(result, 'uid'):
+            task_id = result.uid
+        elif isinstance(result, dict) and 'taskUid' in result:
+            task_id = result['taskUid']
+            
+        self.logger.info(f"已清空会话索引，任务ID: {task_id}")
         
         return result

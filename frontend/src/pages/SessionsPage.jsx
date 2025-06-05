@@ -3,6 +3,7 @@ import useTelegramSDK from '../hooks/useTelegramSDK';
 import { useSessionsStore } from '../store/sessionsStore.js';
 import { addToWhitelist, removeFromWhitelist } from '../services/api';
 import useSettingsStore from '../store/settingsStore';
+import SessionSearchBar from '../components/SessionSearchBar';
 
 /**
  * 会话页面组件
@@ -22,8 +23,12 @@ const SessionsPage = () => {
     isLoadingAvatars,
     error,
     cacheStatus,
+    isSearchMode,
+    isSearching,
+    searchError,
     fetchSessions,
     changePage,
+    searchChangePage,
     refreshSessionsCache,
     clearAvatarCache,
     fetchCacheStatus,
@@ -72,7 +77,13 @@ const SessionsPage = () => {
   // 页面切换处理
   const handlePageChange = async (page) => {
     if (page < 1 || page > totalPages) return;
-    await changePage(page);
+    
+    // 根据当前模式选择不同的分页方法
+    if (isSearchMode) {
+      await searchChangePage(page);
+    } else {
+      await changePage(page);
+    }
     
     // 触发触觉反馈
     try {
@@ -269,6 +280,9 @@ const SessionsPage = () => {
             </button>
           </div>
 
+          {/* 会话搜索栏 */}
+          <SessionSearchBar />
+
           {/* 缓存统计信息 */}
           {showCacheStats && (
             <div className="mb-6 p-4 bg-bg-secondary border border-border-primary rounded-lg transition-theme">
@@ -296,7 +310,7 @@ const SessionsPage = () => {
           
         </header>
 
-        {isLoading && (
+        {(isLoading || isSearching) && (
           <div>
             {/* 分页信息骨架 */}
             <div className="text-center mb-4 animate-pulse">
@@ -318,27 +332,32 @@ const SessionsPage = () => {
           </div>
         )}
         
-        {error && !isLoading && (
+        {/* 显示错误信息 */}
+        {(error || searchError) && !isLoading && !isSearching && (
           <div className="text-center py-10 text-error transition-theme">
             <div className="text-4xl mb-3">⚠️</div>
-            加载失败: {error}
+            {isSearchMode ? `搜索失败: ${searchError}` : `加载失败: ${error}`}
           </div>
         )}
         
-        {!isLoading && !error && sessions.length === 0 && (
+        {!isLoading && !isSearching && !error && !searchError && sessions.length === 0 && (
           <div className="text-center py-10 text-text-secondary transition-theme">
             <div className="text-4xl mb-3">🤷</div>
-            <p>没有找到会话</p>
+            <p>{isSearchMode ? '没有找到匹配的会话' : '没有找到会话'}</p>
           </div>
         )}
 
-        {!isLoading && !error && sessions.length > 0 && (
+        {!isLoading && !isSearching && !error && !searchError && sessions.length > 0 && (
           <>
             {/* 分页信息 */}
             {totalSessions > 0 && (
               <div className="text-center mb-4 text-text-secondary transition-theme">
                 <p className="text-sm">
-                  共 {totalSessions} 个会话，当前显示第 {((currentPage - 1) * pageSize) + 1}-{Math.min(currentPage * pageSize, totalSessions)} 个
+                  {isSearchMode ? (
+                    <>搜索到 {totalSessions} 个会话，当前显示第 {((currentPage - 1) * pageSize) + 1}-{Math.min(currentPage * pageSize, totalSessions)} 个</>
+                  ) : (
+                    <>共 {totalSessions} 个会话，当前显示第 {((currentPage - 1) * pageSize) + 1}-{Math.min(currentPage * pageSize, totalSessions)} 个</>
+                  )}
                 </p>
               </div>
             )}

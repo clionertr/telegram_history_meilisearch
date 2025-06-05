@@ -264,6 +264,28 @@ export const getDialogs = async (page = 1, limit = 20, include_avatars = true) =
   return apiRequest(`/api/v1/dialogs?${params}`);
 };
 
+/**
+ * Dialogs Search API - 搜索用户会话列表
+ * @param {string} query - 搜索关键词
+ * @param {number} page - 当前页码，从1开始
+ * @param {number} limit - 每页结果数量
+ * @param {string} typeFilter - 对话类型过滤，多个用逗号分隔，如：user,group,channel
+ * @returns {Promise} - 搜索结果Promise
+ */
+export const searchDialogs = async (query, page = 1, limit = 20, typeFilter = null) => {
+  const params = new URLSearchParams({
+    q: query,
+    page: page.toString(),
+    limit: limit.toString(),
+  });
+  
+  if (typeFilter) {
+    params.append('type_filter', typeFilter);
+  }
+  
+  return apiRequest(`/api/v1/dialogs/search?${params}`);
+};
+
 // 缓存管理API
 export const getCacheStatus = async () => {
   return apiRequest('/api/v1/dialogs/cache/status');

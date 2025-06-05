@@ -93,6 +93,62 @@ async def get_dialogs(
             detail=f"获取对话列表失败: {str(e)}"
         )
 
+@router.get("/dialogs/search")
+async def search_dialogs(
+    q: str = Query(..., description="搜索关键词"),
+    page: int = Query(1, ge=1, description="页码，从1开始"),
+    limit: int = Query(20, ge=1, le=100, description="每页显示的对话数量，最大100"),
+    type_filter: Optional[str] = Query(None, description="对话类型过滤，用逗号分隔，如：user,group,channel")
+):
+    """
+    搜索用户的对话列表
+    
+    - **q**: 搜索关键词，支持搜索对话名称和ID
+    - **page**: 页码，从1开始
+    - **limit**: 每页显示的对话数量，最大100
+    - **type_filter**: 对话类型过滤，可选值：user, group, channel，多个用逗号分隔
+    
+    返回搜索结果，包含分页信息。每个对话包含：
+    - id: 对话ID
+    - name: 对话名称（包含高亮匹配）
+    - type: 对话类型 (user/group/channel)
+    - unread_count: 未读消息数
+    - date: 最后一条消息时间戳
+    - avatar_base64: 头像数据
+    """
+    try:
+        if not user_bot_client or not hasattr(user_bot_client, '_client') or not user_bot_client._client:
+            raise HTTPException(
+                status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+                detail="UserBot客户端未初始化"
+            )
+
+        # 处理类型过滤
+        session_types = None
+        if type_filter:
+            session_types = [t.strip().lower() for t in type_filter.split(',') if t.strip()]
+            # 验证类型有效性
+            valid_types = {'user', 'group', 'channel'}
+            session_types = [t for t in session_types if t in valid_types]
+            if not session_types:
+                session_types = None
+
+        result = user_bot_client.search_sessions(
+            query=q,
+            session_types=session_types,
+            page=page,
+            hits_per_page=limit
+        )
+        
+        return result
+        
+    except Exception as e:
+        logger.error(f"搜索对话失败: {str(e)}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"搜索对话失败: {str(e)}"
+        )
+
 @router.get("/dialogs/cache/status")
 async def get_cache_status():
     """

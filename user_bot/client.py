@@ -12,7 +12,7 @@ import logging
 import functools
 import asyncio
 import base64
-from typing import Optional
+from typing import Optional, List
 from pathlib import Path
 from telethon import TelegramClient, events
 from telethon.errors import SessionPasswordNeededError
@@ -230,6 +230,11 @@ class UserBotClient:
             await self._preload_all_avatars()
             logger.info(f"头像预下载完成，成功缓存了 {len([v for v in self._avatars_cache.values() if v is not None])} 个头像")
             
+            # 初始化会话索引
+            logger.info("开始初始化会话索引...")
+            await self._index_sessions_to_meilisearch()
+            logger.info("会话索引初始化完成")
+            
             return self._client
             
         except SessionPasswordNeededError:
@@ -442,6 +447,128 @@ class UserBotClient:
             
         except Exception as e:
             logger.error(f"预下载头像时发生错误: {e}")
+
+    async def _index_sessions_to_meilisearch(self) -> None:
+        """
+        将会话数据索引到MeiliSearch中，用于搜索功能
+        """
+        if not self._dialogs_cache:
+            logger.warning("会话缓存为空，无法索引到MeiliSearch")
+            return
+        
+        try:
+            # 准备索引数据
+            session_docs = []
+            for dialog_info in self._dialogs_cache:
+                # 为会话创建搜索文档
+                session_doc = {
+                    "id": str(dialog_info["id"]),  # 确保ID是字符串类型
+                    "name": dialog_info["name"] or "未知对话",
+                    "type": dialog_info["type"],
+                    "unread_count": dialog_info.get("unread_count", 0),
+                    "date": dialog_info.get("date"),
+                    "avatar_key": str(dialog_info["id"])  # 使用dialog_id作为头像缓存key
+                }
+                session_docs.append(session_doc)
+            
+            # 批量索引到MeiliSearch
+            result = self.meilisearch_service.index_sessions_bulk(session_docs)
+            logger.info(f"已将 {len(session_docs)} 个会话索引到MeiliSearch")
+            
+        except Exception as e:
+            logger.error(f"索引会话到MeiliSearch失败: {e}")
+            # 不抛出异常，因为搜索功能失败不应该影响应用启动
+
+    async def refresh_sessions_index(self) -> None:
+        """
+        刷新会话索引：清空现有索引并重新索引所有会话
+        """
+        try:
+            logger.info("开始刷新会话索引...")
+            
+            # 清空现有索引
+            self.meilisearch_service.clear_sessions_index()
+            
+            # 重新获取会话数据
+            await self._init_dialogs_cache()
+            
+            # 重新索引会话
+            await self._index_sessions_to_meilisearch()
+            
+            logger.info("会话索引刷新完成")
+            
+        except Exception as e:
+            logger.error(f"刷新会话索引失败: {e}")
+            raise
+
+    def search_sessions(self, query: str, session_types: Optional[List[str]] = None, 
+                       page: int = 1, hits_per_page: int = 20) -> dict:
+        """
+        搜索会话
+        
+        Args:
+            query: 搜索关键词
+            session_types: 会话类型过滤
+            page: 页码
+            hits_per_page: 每页结果数
+            
+        Returns:
+            搜索结果字典
+        """
+        try:
+            # 使用MeiliSearch搜索会话
+            search_results = self.meilisearch_service.search_sessions(
+                query=query,
+                session_types=session_types,
+                page=page,
+                hits_per_page=hits_per_page,
+                sort=["date:desc"]
+            )
+            
+            # 增强搜索结果，添加头像信息
+            enhanced_hits = []
+            for hit in search_results.get('hits', []):
+                session_id = int(hit['id'])
+                
+                # 从缓存获取头像
+                avatar_base64 = self._avatars_cache.get(session_id)
+                
+                # 构建增强的会话信息
+                enhanced_session = {
+                    "id": session_id,
+                    "name": hit['name'],
+                    "type": hit['type'],
+                    "unread_count": hit.get('unread_count', 0),
+                    "date": hit.get('date'),
+                    "avatar_base64": avatar_base64
+                }
+                enhanced_hits.append(enhanced_session)
+            
+            # 返回增强的搜索结果
+            return {
+                "items": enhanced_hits,
+                "total": search_results.get('estimatedTotalHits', 0),
+                "page": page,
+                "limit": hits_per_page,
+                "total_pages": (search_results.get('estimatedTotalHits', 0) + hits_per_page - 1) // hits_per_page,
+                "has_avatars": True,
+                "from_search": True,
+                "processing_time_ms": search_results.get('processingTimeMs', 0)
+            }
+            
+        except Exception as e:
+            logger.error(f"搜索会话失败: {e}")
+            # 返回空结果而不是抛出异常
+            return {
+                "items": [],
+                "total": 0,
+                "page": page,
+                "limit": hits_per_page,
+                "total_pages": 0,
+                "has_avatars": True,
+                "from_search": True,
+                "error": str(e)
+            }
 
     async def get_dialogs_info(self, page: int = 1, limit: int = 20, include_avatars: bool = True) -> dict:
         """
