@@ -290,27 +290,10 @@ const SessionsPage = () => {
                     {formatCacheAge(cacheInfo.cacheAge) || '无'}
                   </span>
                 </div>
-                <div>
-                  <span className="text-text-secondary transition-theme">头像加载:</span>
-                  <span className="ml-2 font-medium text-text-primary transition-theme">
-                    {isLoadingAvatars ? '加载中...' : '完成'}
-                  </span>
-                </div>
               </div>
             </div>
           )}
           
-          {isLoadingAvatars && !isLoading && (
-            <div className="text-sm mt-2 text-text-secondary transition-theme">
-              <span className="inline-flex items-center">
-                <svg className="animate-spin -ml-1 mr-2 h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
-                  <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4"></circle>
-                  <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
-                </svg>
-                正在加载头像...
-              </span>
-            </div>
-          )}
         </header>
 
         {isLoading && (
@@ -389,11 +372,7 @@ const SessionsPage = () => {
                             display: session.avatar_base64 && session.avatar_base64 !== null ? 'none' : 'flex'
                           }}
                         >
-                          {isLoadingAvatars ? (
-                            <div className="w-6 h-6 border-2 border-accent-primary border-t-transparent rounded-full animate-spin"></div>
-                          ) : (
-                            session.name ? session.name.charAt(0).toUpperCase() : '?'
-                          )}
+                          {session.name ? session.name.charAt(0).toUpperCase() : '?'}
                         </div>
                       </div>
                       
@@ -491,7 +470,7 @@ const SessionsPage = () => {
         {/* 性能提示 */}
         {cacheInfo.isCacheInitialized && !isLoading && (
           <div className="mt-6 p-3 bg-success/10 border border-success text-success rounded text-sm transition-theme">
-            ⚡ 缓存已启用：页面切换瞬时完成，头像按需加载
+            ⚡ 缓存已启用：页面切换瞬时完成，头像已在启动时预下载
           </div>
         )}
 

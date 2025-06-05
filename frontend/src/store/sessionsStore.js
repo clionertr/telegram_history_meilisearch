@@ -115,7 +115,7 @@ class SessionsStore extends EventEmitter {
       let totalCount = 0;
       
       // 先获取第一页来了解总数
-      const firstPageResult = await getDialogs(1, 100, false);
+      const firstPageResult = await getDialogs(1, 100, true);
       if (!firstPageResult || !firstPageResult.items) {
         throw new Error('获取会话数据失败');
       }
@@ -129,7 +129,7 @@ class SessionsStore extends EventEmitter {
       // 获取剩余页面
       const pagePromises = [];
       for (let pageNum = 2; pageNum <= Math.min(totalPages, 10); pageNum++) { // 最多获取10页，避免过度请求
-        pagePromises.push(getDialogs(pageNum, 100, false));
+        pagePromises.push(getDialogs(pageNum, 100, true));
       }
       
       if (pagePromises.length > 0) {
@@ -159,8 +159,8 @@ class SessionsStore extends EventEmitter {
       
       console.log(`缓存已初始化: ${this.allSessionsCache.length} 个会话`);
       
-      // 异步加载当前页头像
-      this.loadAvatarsForCurrentPage();
+      // 现在头像已在后端启动时预下载，无需额外加载
+      
     } catch (err) {
       console.error('获取会话数据失败:', err);
       this.setState({ error: err.message || '获取会话数据失败' });
@@ -177,63 +177,6 @@ class SessionsStore extends EventEmitter {
     const pageData = this.allSessionsCache.slice(startIndex, endIndex);
     
     this.setState({ sessions: pageData });
-  }
-
-  // 为当前页异步加载头像
-  async loadAvatarsForCurrentPage() {
-    try {
-      this.setState({ isLoadingAvatars: true });
-      
-      const { currentPage, pageSize } = this.state;
-      
-      console.log(`开始加载第 ${currentPage} 页的头像...`);
-      
-      // 获取当前页数据（含头像）
-      const result = await getDialogs(currentPage, pageSize, true);
-      
-      if (result && result.items) {
-        console.log(`API返回 ${result.items.length} 个会话`);
-        
-        // 统计头像信息
-        const avatarStats = result.items.reduce((acc, item) => {
-          if (item.avatar_base64) {
-            acc.withAvatar++;
-          } else {
-            acc.withoutAvatar++;
-          }
-          return acc;
-        }, { withAvatar: 0, withoutAvatar: 0 });
-        
-        console.log(`头像统计: ${avatarStats.withAvatar} 个有头像, ${avatarStats.withoutAvatar} 个无头像`);
-        
-        // 直接更新当前页的会话数据，包含头像
-        this.setState({ sessions: result.items });
-        
-        // 同时更新全局缓存中对应的头像数据
-        const startIndex = (currentPage - 1) * pageSize;
-        result.items.forEach((sessionWithAvatar, index) => {
-          const globalIndex = startIndex + index;
-          if (globalIndex < this.allSessionsCache.length) {
-            this.allSessionsCache[globalIndex] = {
-              ...this.allSessionsCache[globalIndex],
-              avatar_base64: sessionWithAvatar.avatar_base64
-            };
-          }
-        });
-        
-        console.log(`第 ${currentPage} 页头像加载完成，包含 ${result.items.length} 个会话`);
-        console.log('头像数据示例:', result.items.slice(0, 2).map(s => ({
-          name: s.name,
-          hasAvatar: !!s.avatar_base64
-        })));
-      } else {
-        console.warn('获取头像数据失败，result为空');
-      }
-    } catch (err) {
-      console.error('加载头像失败:', err);
-    } finally {
-      this.setState({ isLoadingAvatars: false });
-    }
   }
 
   // 快速切换页面（无API调用）
@@ -258,8 +201,7 @@ class SessionsStore extends EventEmitter {
     
     console.log(`瞬时切换到第 ${page} 页`);
     
-    // 异步加载头像
-    this.loadAvatarsForCurrentPage();
+    // 头像已在后端预下载，无需额外加载
   }
 
   // 手动刷新缓存
@@ -309,8 +251,7 @@ class SessionsStore extends EventEmitter {
       
       console.log('头像缓存已清除');
       
-      // 重新加载当前页头像
-      this.loadAvatarsForCurrentPage();
+      // 头像将在后端下次预下载时重新获取
     } catch (err) {
       console.error('清除头像缓存失败:', err);
       this.setState({ error: err.message || '清除头像缓存失败' });

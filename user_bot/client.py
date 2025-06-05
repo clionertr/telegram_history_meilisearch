@@ -225,6 +225,11 @@ class UserBotClient:
             await self._init_dialogs_cache()
             logger.info(f"会话缓存初始化完成，缓存了 {len(self._dialogs_cache)} 个会话")
             
+            # 预下载所有头像
+            logger.info("开始预下载所有会话头像...")
+            await self._preload_all_avatars()
+            logger.info(f"头像预下载完成，成功缓存了 {len([v for v in self._avatars_cache.values() if v is not None])} 个头像")
+            
             return self._client
             
         except SessionPasswordNeededError:
@@ -386,6 +391,58 @@ class UserBotClient:
         self._avatars_cache.clear()
         logger.info("头像缓存已清除")
 
+    async def _preload_all_avatars(self) -> None:
+        """
+        预下载所有会话的头像
+        
+        在应用启动时并发下载所有会话的头像，提升用户体验。
+        使用信号量控制并发数量，避免过多的并发请求。
+        """
+        if not self._dialogs_cache:
+            logger.warning("会话缓存为空，无法预下载头像")
+            return
+        
+        # 限制并发下载数量，避免过多请求
+        max_concurrent = 10
+        semaphore = asyncio.Semaphore(max_concurrent)
+        
+        async def download_with_semaphore(dialog_info):
+            """带信号量控制的下载函数"""
+            async with semaphore:
+                return await self._download_and_cache_avatar(dialog_info)
+        
+        # 创建所有下载任务
+        download_tasks = [
+            download_with_semaphore(dialog_info) 
+            for dialog_info in self._dialogs_cache
+        ]
+        
+        logger.info(f"开始并发下载 {len(download_tasks)} 个会话的头像（最大并发数: {max_concurrent}）")
+        
+        # 并发执行所有下载任务
+        try:
+            results = await asyncio.gather(*download_tasks, return_exceptions=True)
+            
+            # 统计下载结果
+            success_count = 0
+            error_count = 0
+            no_avatar_count = 0
+            
+            for i, result in enumerate(results):
+                if isinstance(result, Exception):
+                    error_count += 1
+                    dialog_info = self._dialogs_cache[i]
+                    logger.warning(f"下载对话 {dialog_info['id']} ({dialog_info['name']}) 头像时发生异常: {result}")
+                elif result is None:
+                    no_avatar_count += 1
+                else:
+                    success_count += 1
+            
+            logger.info(f"头像预下载完成 - 成功: {success_count}, 无头像: {no_avatar_count}, 失败: {error_count}")
+            
+        except Exception as e:
+            logger.error(f"预下载头像时发生错误: {e}")
+
     async def get_dialogs_info(self, page: int = 1, limit: int = 20, include_avatars: bool = True) -> dict:
         """
         获取用户账户下的所有对话信息，支持分页。
@@ -479,7 +536,9 @@ class UserBotClient:
                 
                 # 处理头像
                 if include_avatars:
-                    avatar = await self._download_and_cache_avatar(dialog_info)
+                    # 直接从缓存获取头像，不再进行下载
+                    dialog_id = dialog_info["id"]
+                    avatar = self._avatars_cache.get(dialog_id, None)
                     result_dialog["avatar_base64"] = avatar
                 else:
                     result_dialog["avatar_base64"] = None
