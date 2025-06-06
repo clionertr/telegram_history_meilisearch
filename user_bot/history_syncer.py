@@ -107,6 +107,7 @@ class HistorySyncer:
         """
         # 确定同步模式和范围
         sync_mode = "全量同步"
+        min_id: Optional[int] = None  # 用于 Telethon iter_messages 的最小消息 ID（仅获取更新的消息）
         last_sync_point = None
         
         # 如果启用增量同步，尝试获取最后同步点
@@ -123,11 +124,17 @@ class HistorySyncer:
                 
                 # 如果提供了date_from，则使用date_from和last_date中较新的一个
                 if date_from and last_date and date_from > last_date:
+                    min_id = message_id
                     offset_date = date_from
                     logger.info(f"使用指定的date_from({date_from})作为开始时间点，因为它比最后同步日期({last_date})更新")
                 elif last_date:
-                    offset_date = last_date
-                    logger.info(f"使用最后同步日期({last_date})作为开始时间点")
+                    # 对于增量同步，只需要保证新的消息被拉取。Telethon 提供的 `min_id` 参数
+                    # 可以让我们只获取 *比指定 ID 更新* 的消息，方向仍然是从新到旧。
+                    # 这样可以避免使用 offset_date 导致只能获取更旧消息的问题。
+                    min_id = message_id  # 只获取 ID 大于此值的消息
+                    offset_date = None  # 避免与 min_id 冲突
+                    logger.info(
+                        f"使用 min_id={min_id} 进行增量同步，只拉取比 message_id 更新的消息")
             else:
                 logger.info(f"未找到聊天 {chat_id} 的同步点，将执行全量同步")
         
@@ -189,12 +196,19 @@ class HistorySyncer:
             # 准备批量消息列表
             message_batch: List[MeiliMessageDoc] = []
             
-            # 使用迭代器获取历史消息，避免一次性加载全部
+            # 构造 iter_messages 的参数字典，按需选择 min_id 或 offset_date
+            iter_kwargs = {
+                "limit": limit,
+                "wait_time": RATE_LIMIT_WAIT
+            }
+            if min_id is not None:
+                iter_kwargs["min_id"] = min_id
+            elif offset_date is not None:
+                iter_kwargs["offset_date"] = offset_date
+
             async for message in client.iter_messages(
                 chat_id,
-                limit=limit,
-                offset_date=offset_date,
-                wait_time=RATE_LIMIT_WAIT  # 防止触发速率限制
+                **iter_kwargs
             ):
                 # 跳过非文本消息
                 if not message.text:
