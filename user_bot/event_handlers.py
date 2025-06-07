@@ -13,7 +13,7 @@ from typing import Optional, Dict, Any
 from telethon import events, TelegramClient
 from telethon.tl.types import User, Chat, Channel
 
-from core.config_manager import ConfigManager
+from core.config_manager import ConfigManager, SyncPointManager
 from core.meilisearch_service import MeiliSearchService
 from core.models import MeiliMessageDoc
 from user_bot.utils import generate_message_link, format_sender_name, determine_chat_type
@@ -24,6 +24,7 @@ logger = logging.getLogger(__name__)
 # 模块级别的服务实例，用于向后兼容和单例模式访问
 _config_manager: Optional[ConfigManager] = None
 _meili_search_service: Optional[MeiliSearchService] = None
+_sync_point_manager: Optional[SyncPointManager] = None
 
 
 def get_config_manager() -> ConfigManager:
@@ -69,6 +70,15 @@ def get_meili_search_service() -> MeiliSearchService:
         _meili_search_service = MeiliSearchService(host=host, api_key=api_key)
         
     return _meili_search_service
+
+
+def get_sync_point_manager() -> SyncPointManager:
+    """获取 SyncPointManager 单例实例"""
+    global _sync_point_manager
+    if _sync_point_manager is None:
+        logger.info("初始化 SyncPointManager 实例")
+        _sync_point_manager = SyncPointManager()
+    return _sync_point_manager
 
 
 def extract_message_data(event) -> Dict[str, Any]:
@@ -174,6 +184,15 @@ async def handle_new_message(event, config_manager: Optional[ConfigManager] = No
             task_id = result['taskUid']
             
         logger.info(f"消息索引成功: id={message_doc.id}, task_id={task_id}")
+
+        # 更新同步点，确保离线期间的新消息不会丢失
+        sync_manager = get_sync_point_manager()
+        sync_manager.update_sync_point(
+            chat_id=chat_id,
+            message_id=event.message.id,
+            date=event.message.date,
+            additional_info={"timestamp": int(event.message.date.timestamp())}
+        )
         
     except Exception as e:
         logger.error(f"处理新消息时发生错误: {str(e)}", exc_info=True)
@@ -231,6 +250,15 @@ async def handle_message_edited(event, config_manager: Optional[ConfigManager] =
             
         logger.info(f"消息更新成功: id={message_doc.id}, task_id={task_id}")
         logger.debug(f"更新策略: 使用文档替换方式更新索引中的消息")
+
+        # 更新同步点，也将编辑的消息视为最新活动
+        sync_manager = get_sync_point_manager()
+        sync_manager.update_sync_point(
+            chat_id=chat_id,
+            message_id=event.message.id,
+            date=event.message.date,
+            additional_info={"timestamp": int(event.message.date.timestamp())}
+        )
         
     except Exception as e:
         logger.error(f"处理消息编辑时发生错误: {str(e)}", exc_info=True)

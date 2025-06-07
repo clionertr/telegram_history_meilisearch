@@ -507,21 +507,25 @@ class HistorySyncer:
             message: 最后处理的消息
         """
         # 保存在内存中（向后兼容）
-        self.last_sync_points[chat_id] = {
-            "message_id": message.id,
-            "date": message.date,
-            "timestamp": int(time.time())
-        }
-        
-        logger.debug(f"更新聊天 {chat_id} 的最后同步点: message_id={message.id}, date={message.date}")
-        
-        # 持久化存储同步点
-        self.sync_point_manager.update_sync_point(
-            chat_id=chat_id,
-            message_id=message.id,
-            date=message.date,
-            additional_info={"timestamp": int(time.time())}
-        )
+        current = self.last_sync_points.get(chat_id)
+        if not current or message.id > current.get("message_id", 0):
+            self.last_sync_points[chat_id] = {
+                "message_id": message.id,
+                "date": message.date,
+                "timestamp": int(time.time())
+            }
+
+            logger.debug(
+                f"更新聊天 {chat_id} 的最后同步点: message_id={message.id}, date={message.date}"
+            )
+
+            # 持久化存储同步点
+            self.sync_point_manager.update_sync_point(
+                chat_id=chat_id,
+                message_id=message.id,
+                date=message.date,
+                additional_info={"timestamp": int(time.time())}
+            )
 
 
 async def sync_chat_history(
