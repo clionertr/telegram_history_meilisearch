@@ -786,17 +786,25 @@ class SyncPointManager:
         else:
             date_timestamp = date
             
+        # 获取现有同步点信息（如果存在）
+        existing_sync_point = self.sync_points.get(chat_id_str, {})
+
         # 创建同步点信息
         sync_point = {
             "message_id": message_id,
             "date": date_timestamp,
-            "updated_at": int(time.time())
+            "updated_at": int(time.time()),
+            # 保留现有的同步状态信息
+            "forward_sync_complete": existing_sync_point.get("forward_sync_complete", False),
+            "backward_sync_complete": existing_sync_point.get("backward_sync_complete", False),
+            "last_forward_sync": existing_sync_point.get("last_forward_sync"),
+            "last_backward_sync": existing_sync_point.get("last_backward_sync")
         }
-        
+
         # 添加额外信息
         if additional_info and isinstance(additional_info, dict):
             sync_point.update(additional_info)
-            
+
         # 更新同步点
         self.sync_points[chat_id_str] = sync_point
         
@@ -832,3 +840,96 @@ class SyncPointManager:
         self.sync_points = {}
         self.save_sync_points()
         self.logger.info("已重置所有同步点信息")
+
+    def update_sync_status(self, chat_id: int, sync_type: str, completed: bool = True) -> None:
+        """
+        更新聊天的同步状态
+
+        Args:
+            chat_id: 聊天ID
+            sync_type: 同步类型，'forward' 或 'backward'
+            completed: 是否完成同步
+        """
+        chat_id_str = str(chat_id)
+
+        # 获取现有同步点，如果不存在则创建
+        if chat_id_str not in self.sync_points:
+            self.sync_points[chat_id_str] = {
+                "message_id": 0,
+                "date": 0,
+                "updated_at": int(time.time()),
+                "forward_sync_complete": False,
+                "backward_sync_complete": False,
+                "last_forward_sync": None,
+                "last_backward_sync": None
+            }
+
+        sync_point = self.sync_points[chat_id_str]
+        current_time = int(time.time())
+
+        if sync_type == "forward":
+            sync_point["forward_sync_complete"] = completed
+            sync_point["last_forward_sync"] = current_time
+        elif sync_type == "backward":
+            sync_point["backward_sync_complete"] = completed
+            sync_point["last_backward_sync"] = current_time
+
+        sync_point["updated_at"] = current_time
+
+        # 保存到文件
+        self.save_sync_points()
+
+        self.logger.debug(f"更新聊天 {chat_id} 的{sync_type}同步状态: {completed}")
+
+    def get_sync_status(self, chat_id: int) -> Dict[str, Any]:
+        """
+        获取聊天的同步状态
+
+        Args:
+            chat_id: 聊天ID
+
+        Returns:
+            包含同步状态信息的字典
+        """
+        chat_id_str = str(chat_id)
+        sync_point = self.sync_points.get(chat_id_str, {})
+
+        return {
+            "forward_sync_complete": sync_point.get("forward_sync_complete", False),
+            "backward_sync_complete": sync_point.get("backward_sync_complete", False),
+            "last_forward_sync": sync_point.get("last_forward_sync"),
+            "last_backward_sync": sync_point.get("last_backward_sync"),
+            "last_sync_point": {
+                "message_id": sync_point.get("message_id", 0),
+                "date": sync_point.get("date", 0)
+            } if sync_point.get("message_id") else None
+        }
+
+    def is_sync_gap_detected(self, chat_id: int) -> bool:
+        """
+        检测是否存在同步空缺
+
+        Args:
+            chat_id: 聊天ID
+
+        Returns:
+            是否检测到同步空缺
+        """
+        status = self.get_sync_status(chat_id)
+
+        # 如果向前同步和向后同步都没有完成，可能存在空缺
+        if not status["forward_sync_complete"] or not status["backward_sync_complete"]:
+            return True
+
+        # 检查同步时间间隔，如果间隔过长可能存在空缺
+        last_forward = status["last_forward_sync"]
+        last_backward = status["last_backward_sync"]
+
+        if last_forward and last_backward:
+            # 如果两次同步时间差异很大，可能存在空缺
+            time_diff = abs(last_forward - last_backward)
+            # 如果时间差超过1小时，认为可能存在空缺
+            if time_diff > 3600:
+                return True
+
+        return False

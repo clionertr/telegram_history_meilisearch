@@ -9,7 +9,7 @@
 import logging
 import asyncio
 import time
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Optional, List, Dict, Any, Union, Tuple
 from telethon.tl.types import Message, User, Chat, Channel
 from telethon.errors import FloodWaitError, ChatAdminRequiredError, ChannelPrivateError
@@ -79,6 +79,21 @@ class HistorySyncer:
         
         logger.info("历史消息同步器初始化完成")
 
+    def _normalize_datetime(self, dt: datetime) -> datetime:
+        """
+        标准化datetime对象，确保都有时区信息
+
+        Args:
+            dt: 要标准化的datetime对象
+
+        Returns:
+            带有时区信息的datetime对象
+        """
+        if dt.tzinfo is None:
+            # 如果没有时区信息，假设是UTC时间
+            return dt.replace(tzinfo=timezone.utc)
+        return dt
+
     async def sync_chat_history(
         self,
         chat_id: int,
@@ -140,15 +155,10 @@ class HistorySyncer:
             logger.info(f"将仅同步 {date_to} 之前的消息")
         
         logger.info(f"开始{sync_mode}聊天 {chat_id} 的历史消息")
-        
-        # 获取最旧同步时间戳
-        oldest_sync_timestamp = self.config_manager.get_oldest_sync_timestamp(chat_id)
-        if oldest_sync_timestamp:
-            logger.info(f"聊天 {chat_id} 的最旧同步时间戳: {oldest_sync_timestamp}")
-        
+
         # 获取客户端实例
         client = self.client.get_client()
-        
+
         # 获取聊天信息
         try:
             chat_entity = await client.get_entity(chat_id)
@@ -159,7 +169,7 @@ class HistorySyncer:
                     getattr(chat_entity, 'first_name', None),
                     getattr(chat_entity, 'last_name', None)
                 )
-            
+
             # 确定聊天类型
             if isinstance(chat_entity, User):
                 chat_type = "user"
@@ -172,116 +182,399 @@ class HistorySyncer:
                     chat_type = "channel"
             else:
                 chat_type = "unknown"
-                
+
             logger.info(f"聊天信息: ID={chat_id}, 标题={chat_title}, 类型={chat_type}")
-            
+
         except Exception as e:
             logger.error(f"获取聊天 {chat_id} 信息失败: {str(e)}")
             return 0, 0
-        
-        # 处理计数
-        processed_count = 0
-        indexed_count = 0
-        attempts = 0
-        
-        # 开始遍历历史消息
+
+        # 执行双向同步策略
+        return await self._execute_bidirectional_sync(
+            chat_id=chat_id,
+            chat_title=chat_title,
+            chat_type=chat_type,
+            client=client,
+            limit=limit,
+            offset_date=offset_date,
+            date_from=date_from,
+            date_to=date_to,
+            incremental=incremental,
+            last_sync_point=last_sync_point
+        )
+
+    async def _execute_bidirectional_sync(
+        self,
+        chat_id: int,
+        chat_title: str,
+        chat_type: str,
+        client,
+        limit: Optional[int] = None,
+        offset_date: Optional[datetime] = None,
+        date_from: Optional[datetime] = None,
+        date_to: Optional[datetime] = None,
+        incremental: bool = True,
+        last_sync_point: Optional[Dict[str, Any]] = None
+    ) -> Tuple[int, int]:
+        """
+        执行双向同步策略：向前同步新消息，向后填补历史空缺
+
+        Args:
+            chat_id: 聊天ID
+            chat_title: 聊天标题
+            chat_type: 聊天类型
+            client: Telegram客户端
+            limit: 最大消息数量限制
+            offset_date: 开始时间点
+            date_from: 开始日期
+            date_to: 结束日期
+            incremental: 是否增量同步
+            last_sync_point: 上次同步点
+
+        Returns:
+            Tuple[int, int]: (处理的消息数量, 成功索引的消息数量)
+        """
+        total_processed = 0
+        total_indexed = 0
+
+        # 获取最旧同步时间戳
+        oldest_sync_timestamp = self.config_manager.get_oldest_sync_timestamp(chat_id)
+        if oldest_sync_timestamp:
+            logger.info(f"聊天 {chat_id} 的最旧同步时间戳: {oldest_sync_timestamp}")
+
         try:
-            # 准备批量消息列表
-            message_batch: List[MeiliMessageDoc] = []
-            
-            # 使用迭代器获取历史消息，避免一次性加载全部
-            async for message in client.iter_messages(
-                chat_id,
-                limit=limit,
-                offset_date=offset_date,
-                wait_time=RATE_LIMIT_WAIT  # 防止触发速率限制
-            ):
-                # 跳过非文本消息
-                if not message.text:
-                    continue
-                    
-                # 时间范围过滤 - 如果设置了date_to且消息日期晚于date_to，跳过
-                if date_to and message.date > date_to:
-                    continue
-                
-                # 检查是否早于最旧同步时间戳，如果是则停止向前同步
-                if oldest_sync_timestamp and message.date <= oldest_sync_timestamp:
-                    logger.info(f"遇到早于最旧同步时间戳的消息 (消息日期: {message.date}, 最旧时间戳: {oldest_sync_timestamp})，停止同步")
-                    break
-                
-                processed_count += 1
-                
-                # 构建消息文档
-                message_doc = await self._build_message_doc(message, chat_id, chat_title, chat_type)
-                
-                if message_doc:
-                    message_batch.append(message_doc)
-                    
-                    # 当达到批处理大小时，索引并清空批处理列表
-                    if len(message_batch) >= BATCH_SIZE:
-                        success = await self._index_message_batch(message_batch)
-                        if success:
-                            indexed_count += len(message_batch)
-                        message_batch = []
-                        
-                        # 记录最后同步点
-                        self._update_last_sync_point(chat_id, message)
-                
-                # 如果设置了limit且已达到，则停止
-                if limit is not None and processed_count >= limit:
-                    break
-                    
-            # 处理剩余的批处理消息
-            if message_batch:
-                success = await self._index_message_batch(message_batch)
-                if success:
-                    indexed_count += len(message_batch)
-                
-                # 记录最后同步点（使用最后一条消息）
-                if message_batch:
-                    # 获取最后一条消息的ID，由于我们在处理时，消息是从新到旧，
-                    # 因此最后一条消息是最早的，下次应该从比它新的消息开始
-                    # 由于索引是以字典形式转换，需要从原始message中获取
-                    self._update_last_sync_point(chat_id, message)
-                    
-                    # 如果还有消息但是它们早于最旧同步时间戳，记录这个情况
-                    if oldest_sync_timestamp:
-                        logger.info(f"由于最旧同步时间戳限制 ({oldest_sync_timestamp})，可能有些较早消息未被同步")
-            
-            logger.info(f"聊天 {chat_id} 同步完成，共处理 {processed_count} 条消息，成功索引 {indexed_count} 条")
-            return processed_count, indexed_count
-            
+            # 检查同步状态
+            sync_status = self.sync_point_manager.get_sync_status(chat_id)
+
+            # 第一步：向前同步（从最新消息开始，检查是否有比上次同步点更新的消息）
+            if incremental and last_sync_point:
+                logger.info(f"执行向前同步，检查聊天 {chat_id} 是否有新消息")
+                forward_processed, forward_indexed = await self._sync_forward_messages(
+                    chat_id=chat_id,
+                    chat_title=chat_title,
+                    chat_type=chat_type,
+                    client=client,
+                    last_sync_point=last_sync_point,
+                    date_to=date_to,
+                    limit=limit
+                )
+                total_processed += forward_processed
+                total_indexed += forward_indexed
+
+                # 更新向前同步状态
+                self.sync_point_manager.update_sync_status(chat_id, "forward", forward_processed == 0)
+                logger.info(f"向前同步完成，处理 {forward_processed} 条消息，索引 {forward_indexed} 条")
+
+            # 第二步：向后同步（填补历史空缺）
+            # 检查是否需要向后同步
+            need_backward_sync = (
+                not sync_status["backward_sync_complete"] or
+                self.sync_point_manager.is_sync_gap_detected(chat_id) or
+                not incremental  # 非增量同步总是执行向后同步
+            )
+
+            if need_backward_sync:
+                logger.info(f"执行向后同步，填补聊天 {chat_id} 的历史空缺")
+                backward_processed, backward_indexed = await self._sync_backward_messages(
+                    chat_id=chat_id,
+                    chat_title=chat_title,
+                    chat_type=chat_type,
+                    client=client,
+                    oldest_sync_timestamp=oldest_sync_timestamp,
+                    last_sync_point=last_sync_point,
+                    offset_date=offset_date,
+                    date_from=date_from,
+                    date_to=date_to,
+                    limit=limit - total_processed if limit else None
+                )
+                total_processed += backward_processed
+                total_indexed += backward_indexed
+
+                # 更新向后同步状态
+                # 如果遇到了最旧同步时间戳限制或没有更多消息，认为向后同步完成
+                backward_complete = (
+                    backward_processed == 0 or
+                    (oldest_sync_timestamp is not None)
+                )
+                self.sync_point_manager.update_sync_status(chat_id, "backward", backward_complete)
+                logger.info(f"向后同步完成，处理 {backward_processed} 条消息，索引 {backward_indexed} 条")
+            else:
+                logger.info(f"聊天 {chat_id} 的向后同步已完成，跳过")
+
+            logger.info(f"聊天 {chat_id} 双向同步完成，总共处理 {total_processed} 条消息，成功索引 {total_indexed} 条")
+            return total_processed, total_indexed
+
         except FloodWaitError as e:
             # Telegram限制了请求频率，需要等待
             wait_time = e.seconds
             logger.warning(f"触发Telegram速率限制，需要等待 {wait_time} 秒")
             await asyncio.sleep(wait_time)
-            
-            # 递增重试次数
-            attempts += 1
-            if attempts < MAX_ATTEMPTS:
-                logger.info(f"重试同步聊天 {chat_id} 历史消息 (尝试 {attempts+1}/{MAX_ATTEMPTS})")
-                return await self.sync_chat_history(
-                    chat_id=chat_id,
-                    limit=limit,
-                    offset_date=offset_date,
-                    date_from=date_from,
-                    date_to=date_to,
-                    incremental=incremental
-                )
-            else:
-                logger.error(f"同步聊天 {chat_id} 历史消息失败: 超过最大重试次数")
-                return processed_count, indexed_count
-                
+
+            # 重试整个双向同步
+            logger.info(f"重试聊天 {chat_id} 的双向同步")
+            return await self._execute_bidirectional_sync(
+                chat_id=chat_id,
+                chat_title=chat_title,
+                chat_type=chat_type,
+                client=client,
+                limit=limit,
+                offset_date=offset_date,
+                date_from=date_from,
+                date_to=date_to,
+                incremental=incremental,
+                last_sync_point=last_sync_point
+            )
+
         except (ChatAdminRequiredError, ChannelPrivateError) as e:
             # 没有权限访问此聊天
             logger.error(f"无权访问聊天 {chat_id}: {str(e)}")
             return 0, 0
-            
+
         except Exception as e:
-            logger.error(f"同步聊天 {chat_id} 历史消息时发生错误: {str(e)}")
+            logger.error(f"双向同步聊天 {chat_id} 时发生错误: {str(e)}")
+            return total_processed, total_indexed
+
+    async def _sync_forward_messages(
+        self,
+        chat_id: int,
+        chat_title: str,
+        chat_type: str,
+        client,
+        last_sync_point: Dict[str, Any],
+        date_to: Optional[datetime] = None,
+        limit: Optional[int] = None
+    ) -> Tuple[int, int]:
+        """
+        向前同步：从最新消息开始，检查是否有比上次同步点更新的消息
+
+        Args:
+            chat_id: 聊天ID
+            chat_title: 聊天标题
+            chat_type: 聊天类型
+            client: Telegram客户端
+            last_sync_point: 上次同步点
+            date_to: 结束日期
+            limit: 消息数量限制
+
+        Returns:
+            Tuple[int, int]: (处理的消息数量, 成功索引的消息数量)
+        """
+        processed_count = 0
+        indexed_count = 0
+
+        # 获取上次同步的时间点和消息ID
+        last_date_timestamp = last_sync_point.get("date")
+        last_message_id = last_sync_point.get("message_id")
+        last_date = datetime.fromtimestamp(last_date_timestamp) if last_date_timestamp else None
+
+        if not last_date:
+            logger.warning(f"聊天 {chat_id} 的上次同步点没有有效日期，跳过向前同步")
+            return 0, 0
+
+        # 标准化时区
+        last_date = self._normalize_datetime(last_date)
+
+        logger.info(f"向前同步：从最新消息开始，查找晚于 {last_date} (message_id > {last_message_id}) 的消息")
+
+        try:
+            message_batch: List[MeiliMessageDoc] = []
+
+            # 从最新消息开始遍历，直到遇到上次同步点
+            async for message in client.iter_messages(
+                chat_id,
+                limit=limit,
+                wait_time=RATE_LIMIT_WAIT
+            ):
+                # 跳过非文本消息
+                if not message.text:
+                    continue
+
+                # 如果消息ID小于或等于上次同步点的消息ID，停止向前同步
+                # 这样可以确保不会重复处理已同步的消息
+                if last_message_id and message.id <= last_message_id:
+                    logger.info(f"遇到上次同步点消息ID {last_message_id}，向前同步结束")
+                    break
+
+                # 双重检查：如果消息时间早于上次同步点，也停止
+                # 标准化消息时间进行比较
+                message_date = self._normalize_datetime(message.date)
+                if message_date <= last_date:
+                    logger.info(f"遇到上次同步点时间 {last_date}，向前同步结束")
+                    break
+
+                # 时间范围过滤
+                if date_to:
+                    date_to_normalized = self._normalize_datetime(date_to)
+                    if message_date > date_to_normalized:
+                        continue
+
+                processed_count += 1
+
+                # 构建消息文档
+                message_doc = await self._build_message_doc(message, chat_id, chat_title, chat_type)
+
+                if message_doc:
+                    message_batch.append(message_doc)
+
+                    # 批量处理
+                    if len(message_batch) >= BATCH_SIZE:
+                        success = await self._index_message_batch(message_batch)
+                        if success:
+                            indexed_count += len(message_batch)
+                        message_batch = []
+
+                        # 更新同步点（向前同步时，更新为最新的消息）
+                        self._update_last_sync_point(chat_id, message)
+
+            # 处理剩余消息
+            if message_batch:
+                success = await self._index_message_batch(message_batch)
+                if success:
+                    indexed_count += len(message_batch)
+
+                # 更新同步点
+                if message_batch:
+                    # 向前同步时，最后一条消息是最新的
+                    self._update_last_sync_point(chat_id, message)
+
             return processed_count, indexed_count
-    
+
+        except Exception as e:
+            logger.error(f"向前同步聊天 {chat_id} 时发生错误: {str(e)}")
+            return processed_count, indexed_count
+
+    async def _sync_backward_messages(
+        self,
+        chat_id: int,
+        chat_title: str,
+        chat_type: str,
+        client,
+        oldest_sync_timestamp: Optional[datetime] = None,
+        last_sync_point: Optional[Dict[str, Any]] = None,
+        offset_date: Optional[datetime] = None,
+        date_from: Optional[datetime] = None,
+        date_to: Optional[datetime] = None,
+        limit: Optional[int] = None
+    ) -> Tuple[int, int]:
+        """
+        向后同步：填补历史消息空缺
+
+        Args:
+            chat_id: 聊天ID
+            chat_title: 聊天标题
+            chat_type: 聊天类型
+            client: Telegram客户端
+            oldest_sync_timestamp: 最旧同步时间戳
+            last_sync_point: 上次同步点
+            offset_date: 开始时间点
+            date_from: 开始日期
+            date_to: 结束日期
+            limit: 消息数量限制
+
+        Returns:
+            Tuple[int, int]: (处理的消息数量, 成功索引的消息数量)
+        """
+        processed_count = 0
+        indexed_count = 0
+
+        # 确定向后同步的起始点
+        start_date = None
+        start_message_id = None
+
+        # 优先使用last_sync_point的日期和消息ID
+        if last_sync_point:
+            last_date_timestamp = last_sync_point.get("date")
+            start_message_id = last_sync_point.get("message_id")
+            if last_date_timestamp:
+                start_date = self._normalize_datetime(datetime.fromtimestamp(last_date_timestamp))
+
+        # 如果没有同步点，使用offset_date或date_from
+        if not start_date:
+            if offset_date:
+                start_date = self._normalize_datetime(offset_date)
+            elif date_from:
+                start_date = self._normalize_datetime(date_from)
+
+        # 如果还是没有起始点，从最新消息开始
+        if not start_date:
+            logger.info(f"聊天 {chat_id} 没有明确的起始点，从最新消息开始向后同步")
+        else:
+            logger.info(f"聊天 {chat_id} 向后同步起始点: {start_date} (message_id: {start_message_id})")
+
+        try:
+            message_batch: List[MeiliMessageDoc] = []
+
+            # 从起始点开始向后遍历历史消息
+            async for message in client.iter_messages(
+                chat_id,
+                limit=limit,
+                offset_date=start_date,
+                wait_time=RATE_LIMIT_WAIT
+            ):
+                # 跳过非文本消息
+                if not message.text:
+                    continue
+
+                # 如果有起始消息ID，跳过已经同步过的消息
+                if start_message_id and message.id >= start_message_id:
+                    continue
+
+                # 标准化消息时间进行比较
+                message_date = self._normalize_datetime(message.date)
+
+                # 时间范围过滤
+                if date_to:
+                    date_to_normalized = self._normalize_datetime(date_to)
+                    if message_date > date_to_normalized:
+                        continue
+
+                if date_from:
+                    date_from_normalized = self._normalize_datetime(date_from)
+                    if message_date < date_from_normalized:
+                        continue
+
+                # 检查是否早于最旧同步时间戳
+                if oldest_sync_timestamp:
+                    oldest_sync_normalized = self._normalize_datetime(oldest_sync_timestamp)
+                    if message_date <= oldest_sync_normalized:
+                        logger.info(f"遇到早于最旧同步时间戳的消息 (消息日期: {message_date}, 最旧时间戳: {oldest_sync_normalized})，停止向后同步")
+                        break
+
+                processed_count += 1
+
+                # 构建消息文档
+                message_doc = await self._build_message_doc(message, chat_id, chat_title, chat_type)
+
+                if message_doc:
+                    message_batch.append(message_doc)
+
+                    # 批量处理
+                    if len(message_batch) >= BATCH_SIZE:
+                        success = await self._index_message_batch(message_batch)
+                        if success:
+                            indexed_count += len(message_batch)
+                        message_batch = []
+
+                        # 向后同步时，更新同步点为最早的消息
+                        self._update_last_sync_point(chat_id, message)
+
+            # 处理剩余消息
+            if message_batch:
+                success = await self._index_message_batch(message_batch)
+                if success:
+                    indexed_count += len(message_batch)
+
+                # 更新同步点
+                if message_batch:
+                    # 向后同步时，最后一条消息是最早的
+                    self._update_last_sync_point(chat_id, message)
+
+            return processed_count, indexed_count
+
+        except Exception as e:
+            logger.error(f"向后同步聊天 {chat_id} 时发生错误: {str(e)}")
+            return processed_count, indexed_count
+
     async def initial_sync_all_whitelisted_chats(
         self,
         limit_per_chat: Optional[int] = None,
