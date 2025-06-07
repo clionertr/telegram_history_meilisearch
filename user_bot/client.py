@@ -19,6 +19,9 @@ from telethon.errors import SessionPasswordNeededError
 
 from core.config_manager import ConfigManager
 from core.meilisearch_service import MeiliSearchService
+from core.async_task_manager import get_task_manager
+from core.shutdown_manager import get_shutdown_manager, TelethonClientManager
+from user_bot.avatar_service import AvatarService
 from user_bot.event_handlers import handle_new_message, handle_message_edited
 from user_bot.history_syncer import initial_sync_all_whitelisted_chats
 
@@ -73,9 +76,15 @@ class UserBotClient:
 
         # 初始化缓存
         self._dialogs_cache = []  # 缓存所有会话的基本信息
-        self._avatars_cache = {}  # 缓存头像 {dialog_id: base64_string}
         self._cache_timestamp = None  # 缓存时间戳
         self._cache_ttl = 300  # 缓存5分钟（可配置）
+
+        # 初始化任务管理器和关闭管理器
+        self.task_manager = get_task_manager()
+        self.shutdown_manager = get_shutdown_manager()
+
+        # 头像服务将在客户端启动后初始化
+        self.avatar_service: Optional[AvatarService] = None
 
         # 初始化MeiliSearchService
         # 从配置获取MeiliSearch配置
@@ -179,7 +188,23 @@ class UserBotClient:
             # 获取当前用户信息，验证登录成功
             me = await self._client.get_me()
             logger.info(f"登录成功! 用户: {me.first_name} (@{me.username})")
-            
+
+            # 初始化头像服务
+            self.avatar_service = AvatarService(self._client, max_concurrent=10)
+            logger.info("头像服务已初始化")
+
+            # 注册关闭处理器
+            self.shutdown_manager.add_handler(
+                "avatar_service",
+                self._shutdown_avatar_service,
+                timeout=10.0
+            )
+            self.shutdown_manager.add_handler(
+                "telethon_client",
+                self._shutdown_telethon_client,
+                timeout=15.0
+            )
+
             # 注册事件处理器
             # 使用functools.partial为事件处理器绑定额外参数（ConfigManager和MeiliSearchService实例）
             new_message_handler = functools.partial(
@@ -227,8 +252,9 @@ class UserBotClient:
             
             # 预下载所有头像
             logger.info("开始预下载所有会话头像...")
-            await self._preload_all_avatars()
-            logger.info(f"头像预下载完成，成功缓存了 {len([v for v in self._avatars_cache.values() if v is not None])} 个头像")
+            await self._preload_all_avatars_with_service()
+            avatar_stats = self.avatar_service.get_stats()
+            logger.info(f"头像预下载完成 - 成功: {avatar_stats['successful_downloads']}, 失败: {avatar_stats['failed_downloads']}, 缓存大小: {avatar_stats['cache_size']}")
             
             # 初始化会话索引
             logger.info("开始初始化会话索引...")
@@ -325,60 +351,28 @@ class UserBotClient:
         await self._init_dialogs_cache()
         logger.info(f"会话缓存已刷新，当前缓存 {len(self._dialogs_cache)} 个会话")
 
-    async def _download_and_cache_avatar(self, dialog_info: dict) -> str:
+    async def _preload_all_avatars_with_service(self) -> None:
         """
-        下载并缓存单个头像
-        
-        Args:
-            dialog_info: 会话信息字典
-            
-        Returns:
-            str: Base64编码的头像数据或None
+        使用头像服务预下载所有会话的头像
         """
-        dialog_id = dialog_info["id"]
-        dialog_name = dialog_info.get("name", "Unknown")
-        
-        # 检查缓存中是否已有头像
-        if dialog_id in self._avatars_cache:
-            logger.debug(f"从缓存返回对话 {dialog_id} ({dialog_name}) 的头像")
-            return self._avatars_cache[dialog_id]
-        
-        try:
-            entity = dialog_info.get("entity")
-            if not entity:
-                logger.warning(f"对话 {dialog_id} ({dialog_name}) 没有entity信息，无法下载头像")
-                self._avatars_cache[dialog_id] = None
-                return None
-            
-            logger.debug(f"开始下载对话 {dialog_id} ({dialog_name}) 的头像...")
-            
-            # 设置超时时间为5秒
-            photo_bytes = await asyncio.wait_for(
-                self._client.download_profile_photo(entity, file=bytes),
-                timeout=5.0
-            )
-            
-            if photo_bytes:
-                base64_string = base64.b64encode(photo_bytes).decode('utf-8')
-                avatar_data = f"data:image/jpeg;base64,{base64_string}"
-                
-                # 缓存头像
-                self._avatars_cache[dialog_id] = avatar_data
-                logger.info(f"成功下载并缓存对话 {dialog_id} ({dialog_name}) 的头像，大小: {len(photo_bytes)} 字节")
-                return avatar_data
-            else:
-                logger.warning(f"对话 {dialog_id} ({dialog_name}) 没有头像或下载为空")
-                self._avatars_cache[dialog_id] = None
-                return None
-                
-        except asyncio.TimeoutError:
-            logger.warning(f"下载对话 {dialog_id} ({dialog_name}) 头像超时 (5秒)")
-            self._avatars_cache[dialog_id] = None
-            return None
-        except Exception as e:
-            logger.warning(f"下载对话 {dialog_id} ({dialog_name}) 头像失败: {e}")
-            self._avatars_cache[dialog_id] = None
-            return None
+        if not self._dialogs_cache:
+            logger.warning("会话缓存为空，无法预下载头像")
+            return
+
+        if not self.avatar_service:
+            logger.error("头像服务未初始化")
+            return
+
+        # 使用头像服务批量下载
+        def progress_callback(completed: int, total: int):
+            if completed % 10 == 0 or completed == total:  # 每10个或完成时记录进度
+                logger.info(f"头像下载进度: {completed}/{total}")
+
+        await self.avatar_service.batch_download_avatars(
+            self._dialogs_cache,
+            timeout_per_avatar=5.0,
+            progress_callback=progress_callback
+        )
 
     def get_cached_dialogs_count(self) -> int:
         """
@@ -393,60 +387,11 @@ class UserBotClient:
         """
         清除头像缓存
         """
-        self._avatars_cache.clear()
+        if self.avatar_service:
+            self.avatar_service.clear_cache()
         logger.info("头像缓存已清除")
 
-    async def _preload_all_avatars(self) -> None:
-        """
-        预下载所有会话的头像
-        
-        在应用启动时并发下载所有会话的头像，提升用户体验。
-        使用信号量控制并发数量，避免过多的并发请求。
-        """
-        if not self._dialogs_cache:
-            logger.warning("会话缓存为空，无法预下载头像")
-            return
-        
-        # 限制并发下载数量，避免过多请求
-        max_concurrent = 10
-        semaphore = asyncio.Semaphore(max_concurrent)
-        
-        async def download_with_semaphore(dialog_info):
-            """带信号量控制的下载函数"""
-            async with semaphore:
-                return await self._download_and_cache_avatar(dialog_info)
-        
-        # 创建所有下载任务
-        download_tasks = [
-            download_with_semaphore(dialog_info) 
-            for dialog_info in self._dialogs_cache
-        ]
-        
-        logger.info(f"开始并发下载 {len(download_tasks)} 个会话的头像（最大并发数: {max_concurrent}）")
-        
-        # 并发执行所有下载任务
-        try:
-            results = await asyncio.gather(*download_tasks, return_exceptions=True)
-            
-            # 统计下载结果
-            success_count = 0
-            error_count = 0
-            no_avatar_count = 0
-            
-            for i, result in enumerate(results):
-                if isinstance(result, Exception):
-                    error_count += 1
-                    dialog_info = self._dialogs_cache[i]
-                    logger.warning(f"下载对话 {dialog_info['id']} ({dialog_info['name']}) 头像时发生异常: {result}")
-                elif result is None:
-                    no_avatar_count += 1
-                else:
-                    success_count += 1
-            
-            logger.info(f"头像预下载完成 - 成功: {success_count}, 无头像: {no_avatar_count}, 失败: {error_count}")
-            
-        except Exception as e:
-            logger.error(f"预下载头像时发生错误: {e}")
+
 
     async def _index_sessions_to_meilisearch(self) -> None:
         """
@@ -530,8 +475,10 @@ class UserBotClient:
             for hit in search_results.get('hits', []):
                 session_id = int(hit['id'])
                 
-                # 从缓存获取头像
-                avatar_base64 = self._avatars_cache.get(session_id)
+                # 从头像服务获取头像
+                avatar_base64 = None
+                if self.avatar_service:
+                    avatar_base64 = self.avatar_service.get_cached_avatar(session_id)
                 
                 # 构建增强的会话信息
                 enhanced_session = {
@@ -662,10 +609,10 @@ class UserBotClient:
                 }
                 
                 # 处理头像
-                if include_avatars:
-                    # 直接从缓存获取头像，不再进行下载
+                if include_avatars and self.avatar_service:
+                    # 从头像服务获取缓存的头像
                     dialog_id = dialog_info["id"]
-                    avatar = self._avatars_cache.get(dialog_id, None)
+                    avatar = self.avatar_service.get_cached_avatar(dialog_id)
                     result_dialog["avatar_base64"] = avatar
                 else:
                     result_dialog["avatar_base64"] = None
@@ -673,8 +620,9 @@ class UserBotClient:
                 dialogs_info.append(result_dialog)
             
             # 如果需要头像且有头像需要下载，记录下载情况
-            if include_avatars:
-                cached_count = sum(1 for d in paginated_dialogs if d["id"] in self._avatars_cache and self._avatars_cache[d["id"]])
+            if include_avatars and self.avatar_service:
+                cached_count = sum(1 for d in paginated_dialogs
+                                 if self.avatar_service.get_cached_avatar(d["id"]) is not None)
                 total_count = len(paginated_dialogs)
                 logger.info(f"页面头像状态: {cached_count}/{total_count} 来自缓存")
             
@@ -785,3 +733,17 @@ class UserBotClient:
             self.session_name = user_session_name
             
         logger.info("User Bot配置和所有相关配置文件已重新加载")
+
+    async def _shutdown_avatar_service(self) -> None:
+        """关闭头像服务"""
+        if self.avatar_service:
+            logger.info("正在关闭头像服务...")
+            await self.avatar_service.cancel_all_downloads()
+            logger.info("头像服务已关闭")
+
+    async def _shutdown_telethon_client(self) -> None:
+        """关闭Telethon客户端"""
+        if self._client:
+            logger.info("正在关闭Telethon客户端...")
+            await TelethonClientManager.disconnect_client(self._client, "UserBot")
+            logger.info("Telethon客户端已关闭")

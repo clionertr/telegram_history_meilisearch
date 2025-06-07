@@ -170,7 +170,9 @@ async def get_cache_status():
         import asyncio
         
         cached_dialogs_count = user_bot_client.get_cached_dialogs_count()
-        cached_avatars_count = len(user_bot_client._avatars_cache)
+        cached_avatars_count = 0
+        if user_bot_client.avatar_service:
+            cached_avatars_count = user_bot_client.avatar_service.get_cache_size()
         cache_valid = user_bot_client._is_cache_valid()
         
         # 计算缓存年龄

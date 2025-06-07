@@ -18,6 +18,8 @@ from typing import Optional, List, Dict, Any
 from user_bot.client import UserBotClient
 from search_bot.bot import SearchBot
 from api.main import app as fastapi_app
+from core.shutdown_manager import get_shutdown_manager
+from core.async_task_manager import get_task_manager
 
 # 全局变量，存储客户端实例，用于在程序退出时确保它们被断开连接
 user_bot_client: Optional[UserBotClient] = None
@@ -66,69 +68,70 @@ def signal_handler(signum, frame):
     logger = logging.getLogger(__name__)
     signal_name = signal.Signals(signum).name
     logger.info(f"接收到 {signal_name} 信号，开始优雅关闭...")
-    
-    # 设置关闭事件
+
+    # 通过关闭管理器触发关闭
+    shutdown_manager = get_shutdown_manager()
+    shutdown_manager.trigger_shutdown(f"Signal {signal_name}")
+
+    # 设置关闭事件（向后兼容）
     if not shutdown_event.is_set():
         shutdown_event.set()
 
 async def shutdown_clients() -> None:
     """
     关闭所有客户端连接
-    
-    确保所有Telegram客户端优雅地断开连接
+
+    使用新的关闭管理器确保所有资源优雅地关闭
     """
     logger = logging.getLogger(__name__)
-    
-    logger.info("开始关闭所有服务...")
-    
-    # 首先优雅地关闭客户端连接，这样可以让内部任务自然结束
-    # 断开UserBot连接
-    if user_bot_client is not None:
-        logger.info("正在断开UserBot连接...")
-        try:
-            await user_bot_client.disconnect()
-            logger.info("UserBot已断开连接")
-        except Exception as e:
-            logger.error(f"断开UserBot连接时出错: {str(e)}")
-    
-    # 断开SearchBot连接
-    if search_bot is not None:
-        logger.info("正在断开SearchBot连接...")
-        try:
-            await search_bot.disconnect()
-            logger.info("SearchBot已断开连接")
-        except Exception as e:
-            logger.error(f"断开SearchBot连接时出错: {str(e)}")
-    
-    # 给一些时间让所有任务自然结束
-    await asyncio.sleep(0.5)
-    
-    # 然后取消剩余的正在运行的任务
-    for name, task in tasks.items():
-        if not task.done():
-            logger.debug(f"取消任务: {name}")
-            task.cancel()
-    
-    # 等待所有任务完成取消
-    if tasks:
-        try:
-            await asyncio.wait_for(
-                asyncio.gather(*tasks.values(), return_exceptions=True),
-                timeout=5.0  # 设置超时时间避免无限等待
-            )
-        except asyncio.TimeoutError:
-            logger.warning("等待任务取消超时，强制退出")
-        except Exception as e:
-            logger.error(f"等待任务取消时出错: {str(e)}")
-    
-    # 关闭FastAPI服务器
-    if fastapi_server is not None:
-        logger.info("正在关闭FastAPI服务器...")
-        try:
-            await fastapi_server.shutdown()
-            logger.info("FastAPI服务器已关闭")
-        except Exception as e:
-            logger.error(f"关闭FastAPI服务器时出错: {str(e)}")
+
+    # 获取管理器实例
+    shutdown_manager = get_shutdown_manager()
+    task_manager = get_task_manager()
+
+    logger.info("开始优雅关闭流程...")
+
+    try:
+        # 使用关闭管理器执行优雅关闭
+        await shutdown_manager.shutdown("Application shutdown")
+
+        # 关闭任务管理器
+        await task_manager.shutdown(timeout=10.0)
+
+        # 关闭FastAPI服务器
+        if fastapi_server is not None:
+            logger.info("正在关闭FastAPI服务器...")
+            try:
+                await fastapi_server.shutdown()
+                logger.info("FastAPI服务器已关闭")
+            except Exception as e:
+                logger.error(f"关闭FastAPI服务器时出错: {str(e)}")
+
+    except Exception as e:
+        logger.error(f"优雅关闭过程中出错: {e}")
+
+        # 如果优雅关闭失败，尝试强制关闭
+        logger.info("尝试强制关闭...")
+
+        # 强制断开UserBot连接
+        if user_bot_client is not None:
+            try:
+                await user_bot_client.disconnect()
+            except Exception as e:
+                logger.error(f"强制断开UserBot连接时出错: {str(e)}")
+
+        # 强制断开SearchBot连接
+        if search_bot is not None:
+            try:
+                await search_bot.disconnect()
+            except Exception as e:
+                logger.error(f"强制断开SearchBot连接时出错: {str(e)}")
+
+        # 强制取消所有任务
+        for name, task in tasks.items():
+            if not task.done():
+                logger.debug(f"强制取消任务: {name}")
+                task.cancel()
 
 async def restart_userbot_task() -> None:
     """
@@ -185,21 +188,25 @@ async def restart_userbot_task() -> None:
 async def async_main() -> None:
     """
     主异步函数
-    
+
     负责实例化并并发运行UserBot、SearchBot客户端和FastAPI服务器
-    使用asyncio.create_task创建独立任务，以便于管理每个任务的生命周期
+    使用新的任务管理器和关闭管理器来确保优雅关闭
     """
     global user_bot_client, search_bot, fastapi_server, tasks
-    
+
     logger = logging.getLogger(__name__)
     logger.info("正在启动Telegram中文历史消息搜索服务...")
+
+    # 获取管理器实例
+    shutdown_manager = get_shutdown_manager()
+    task_manager = get_task_manager()
 
     try:
         # 实例化UserBotClient（使用单例模式）
         user_bot_client = UserBotClient()
         # 实例化SearchBot，传递User Bot重启事件
         search_bot = SearchBot(userbot_restart_event=userbot_restart_event)
-        
+
         logger.info("已创建UserBot和SearchBot实例")
         
         # 配置并创建FastAPI服务器
@@ -213,42 +220,47 @@ async def async_main() -> None:
         fastapi_server = uvicorn.Server(config)
         logger.info("已创建FastAPI服务器实例")
         
-        # 创建并存储任务，使用create_task而不是直接使用gather
-        # 这样我们可以在需要时单独取消任务
-        tasks["UserBotTask"] = asyncio.create_task(
-            user_bot_client.run(),  # 使用run方法替代start方法，以保持客户端运行
-            name="UserBotTask"
+        # 使用任务管理器创建任务
+        tasks["UserBotTask"] = task_manager.create_task(
+            user_bot_client.run(),
+            name="UserBotTask",
+            group="main_services"
         )
-        tasks["SearchBotTask"] = asyncio.create_task(
+        tasks["SearchBotTask"] = task_manager.create_task(
             search_bot.run(),
-            name="SearchBotTask"
+            name="SearchBotTask",
+            group="main_services"
         )
-        tasks["FastAPITask"] = asyncio.create_task(
+        tasks["FastAPITask"] = task_manager.create_task(
             fastapi_server.serve(),
-            name="FastAPITask"
+            name="FastAPITask",
+            group="main_services"
         )
-        
+
         # 创建User Bot重启监听任务
-        tasks["RestartMonitorTask"] = asyncio.create_task(
+        tasks["RestartMonitorTask"] = task_manager.create_task(
             restart_userbot_task(),
-            name="RestartMonitorTask"
+            name="RestartMonitorTask",
+            group="monitoring"
         )
         logger.info("已启动所有服务任务")
         
-        # 创建一个监听关闭信号的任务
+        # 安装信号处理器并等待关闭信号
+        shutdown_manager.install_signal_handlers()
+
+        # 创建关闭监听任务
         async def wait_for_shutdown():
-            await shutdown_event.wait()
+            await shutdown_manager.wait_for_shutdown()
             logger.info("接收到关闭信号，开始关闭所有任务...")
-            # 取消所有任务
-            for name, task in tasks.items():
-                if not task.done():
-                    logger.info(f"取消任务: {name}")
-                    task.cancel()
-        
+            # 通过任务管理器取消所有任务
+            await task_manager.cancel_group("main_services")
+            await task_manager.cancel_group("monitoring")
+
         # 将关闭监听任务也加入到任务列表中
-        tasks["ShutdownMonitor"] = asyncio.create_task(
+        tasks["ShutdownMonitor"] = task_manager.create_task(
             wait_for_shutdown(),
-            name="ShutdownMonitor"
+            name="ShutdownMonitor",
+            group="system"
         )
         
         # 等待所有任务完成
