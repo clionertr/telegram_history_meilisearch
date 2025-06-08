@@ -311,23 +311,41 @@ class MeiliSearchService:
     def index_messages_bulk(self, message_docs: List[MeiliMessageDoc]) -> dict:
         """
         批量索引消息
-        
+
         Args:
             message_docs: 消息文档列表，每项为 MeiliMessageDoc Pydantic 模型实例
-            
+
         Returns:
             Meilisearch 的响应字典，通常包含任务信息
         """
         if not message_docs:
             self.logger.warning("批量索引时提供的消息列表为空")
             return {"message": "No documents to index"}
-        
+
+        # 提取会话ID和消息ID范围信息用于日志记录
+        chat_ids = set()
+        message_ids = []
+
+        for doc in message_docs:
+            chat_ids.add(doc.chat_id)
+            message_ids.append(doc.message_id)
+
+        # 计算消息ID范围
+        min_message_id = min(message_ids) if message_ids else 0
+        max_message_id = max(message_ids) if message_ids else 0
+
+        # 格式化会话ID信息
+        if len(chat_ids) == 1:
+            session_info = f"会话ID: {list(chat_ids)[0]}"
+        else:
+            session_info = f"会话ID: {sorted(chat_ids)} ({len(chat_ids)}个会话)"
+
         # 将所有 Pydantic 模型转换为字典列表
         docs_dict = [doc.model_dump() for doc in message_docs]
-        
+
         # 批量添加到 Meilisearch 索引
         result = self.index.add_documents(docs_dict)
-        
+
         # 适配新版 Meilisearch API 返回值处理
         task_id = "unknown"
         if hasattr(result, 'task_uid'):
@@ -337,9 +355,9 @@ class MeiliSearchService:
         elif isinstance(result, dict) and 'taskUid' in result:
             # 兼容旧版 API
             task_id = result['taskUid']
-            
-        self.logger.info(f"已批量索引 {len(message_docs)} 条消息，任务ID: {task_id}")
-        
+
+        self.logger.info(f"已批量索引 {len(message_docs)} 条消息，{session_info}，消息ID范围: {min_message_id}-{max_message_id}，任务ID: {task_id}")
+
         return result
     
     def search(self, query: str, filters: Optional[str] = None, sort: Optional[List[str]] = None,

@@ -240,12 +240,9 @@ class TelethonClientManager:
         try:
             # 给客户端一些时间来完成正在进行的操作
             await asyncio.sleep(0.1)
-            
-            # 使用优雅关闭，等待所有内部任务完成
-            disconnect_task = asyncio.create_task(client.disconnect())
-            
-            # 设置超时，避免无限等待
-            await asyncio.wait_for(disconnect_task, timeout=5.0)
+
+            # 使用优雅关闭，等待所有内部任务完成，直接使用 wait_for 包装协程
+            await asyncio.wait_for(client.disconnect(), timeout=5.0)
             
             logger.info(f"{client_name} 连接已优雅关闭")
             
