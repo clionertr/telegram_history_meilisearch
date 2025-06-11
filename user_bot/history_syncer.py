@@ -103,9 +103,15 @@ class HistorySyncer:
 
     # ----------------------- 初始化 -----------------------
     async def initialize(self) -> None:
-        if self.state.get("cutoff_id", 0) == 0 and self.state.get("cutoff_ts", 0) > 0:
-            first = await self.client.get_messages(self.chat_id, limit=1, offset_date=self.state["cutoff_ts"])
-            self.state["cutoff_id"] = first[0].id if first else 0
+        if self.state.get("cutoff_ts", 0) > 0:
+            # 始终根据 cutoff_ts 重新获取对应的第一条消息，以更新 cutoff_id
+            messages = await self.client.get_messages(
+                self.chat_id,
+                limit=1,
+                offset_date=self.state["cutoff_ts"],
+            )
+            if messages:
+                self.state["cutoff_id"] = messages[0].id
 
         if self.state.get("last_newest_id", 0) == 0 or self.state.get("next_oldest_id", 0) == 0:
             top = await self.client.get_messages(self.chat_id, limit=1)
