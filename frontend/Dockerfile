@@ -3,7 +3,10 @@ WORKDIR /app
 
 # 安装依赖并构建
 COPY package*.json ./
-RUN npm ci --loglevel warn
+
+# 使用 npm ci，如果失败则回退到 npm install
+RUN npm ci --loglevel warn || npm install --loglevel warn
+
 COPY . .
 RUN npm run build
 
