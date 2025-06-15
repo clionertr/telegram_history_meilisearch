@@ -1,10 +1,49 @@
 version: '3.8'
 services:
+  backend:
+    image: python:3.11-slim
+    container_name: sync-backend
+    working_dir: /app
+    # 将当前项目挂载到容器中，方便快速迭代
+    volumes:
+      - ./:/app
+    # 如果有专用的敏感配置，可在 config/.env 中维护
+    env_file:
+      - ./config/.env
+    environment:
+      # 覆盖默认配置，使后端能够连接到 meilisearch 容器
+      MEILISEARCH_HOST: "http://meilisearch:7700"
+      MEILISEARCH_API_KEY: "ThisIsASuperSecureRandomKeyForMeiliSearch123!@#"
+    command: >
+      bash -c "pip install --no-cache-dir --upgrade pip && \
+               pip install --no-cache-dir -r requirements.txt && \
+               python main.py"
+    ports:
+      - "8000:8000"
+    depends_on:
+      - meilisearch
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+    container_name: sync-frontend
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
   meilisearch:
     image: getmeili/meilisearch:latest
+    container_name: meilisearch
     ports:
       - "7700:7700"
     volumes:
-      - ./meili_data:/meili_data
+      - meili_data:/meili_data
     environment:
-      MEILI_MASTER_KEY: 'ThisIsASuperSecureRandomKeyForMeiliSearch123!@#'
+      MEILI_MASTER_KEY: "ThisIsASuperSecureRandomKeyForMeiliSearch123!@#"
+    restart: unless-stopped
+
+volumes:
+  meili_data:
