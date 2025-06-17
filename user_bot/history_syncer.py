@@ -189,7 +189,9 @@ class HistorySyncer:
                 cutoff_id = self.state["cutoff_id"]
                 overlap = self.state["overlap"]
 
-            if cutoff_id == 0 or next_oldest <= cutoff_id:
+            # 当已到达截止ID (cutoff_id) 时停止向后同步；
+            # 若 cutoff_id 为 0，则表示无限制，需要继续同步直到最早消息。
+            if next_oldest <= cutoff_id:
                 await asyncio.sleep(3600)
                 continue
 
