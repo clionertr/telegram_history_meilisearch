@@ -156,7 +156,7 @@ class AvatarService:
                 self._avatars_cache[dialog_id] = avatar_data
                 self._stats['successful_downloads'] += 1
                 
-                logger.info(f"成功下载并缓存对话 {dialog_id} ({dialog_name}) 的头像，大小: {len(photo_bytes)} 字节")
+                logger.debug(f"成功下载并缓存对话 {dialog_id} ({dialog_name}) 的头像，大小: {len(photo_bytes)} 字节")
                 return avatar_data
             else:
                 logger.warning(f"对话 {dialog_id} ({dialog_name}) 没有头像或下载为空")
