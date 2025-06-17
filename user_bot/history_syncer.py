@@ -103,21 +103,33 @@ class HistorySyncer:
 
     # ----------------------- 初始化 -----------------------
     async def initialize(self) -> None:
+        # cutoff_ts → cutoff_id 首次换算（若提供）
         if self.state.get("cutoff_ts", 0) > 0:
-            # 始终根据 cutoff_ts 重新获取对应的第一条消息，以更新 cutoff_id
-            messages = await self.client.get_messages(
-                self.chat_id,
-                limit=1,
-                offset_date=self.state["cutoff_ts"],
-            )
-            if messages:
-                self.state["cutoff_id"] = messages[0].id
+            ts = self.state["cutoff_ts"]
+            # Telethon 要求 datetime 类型；兼容 int 时间戳
+            offset_dt = datetime.fromtimestamp(ts) if isinstance(ts, (int, float)) else ts
+            try:
+                messages = await self.client.get_messages(
+                    self.chat_id,
+                    limit=1,
+                    offset_date=offset_dt,
+                )
+                if messages:
+                    self.state["cutoff_id"] = messages[0].id
+                    _logger.debug(
+                        f"[{self.chat_id}] 根据 cutoff_ts={ts} 解析得到 cutoff_id={self.state['cutoff_id']}")
+            except Exception as e:
+                _logger.warning(f"[{self.chat_id}] 获取 cutoff_id 失败: {e}")
 
-        if self.state.get("last_newest_id", 0) == 0 or self.state.get("next_oldest_id", 0) == 0:
+        # 仅在完全空状态（两者皆为 0）时才初始化光标，避免已完成同步后再次全量拉取
+        if self.state.get("last_newest_id", 0) == 0 and self.state.get("next_oldest_id", 0) == 0:
             top = await self.client.get_messages(self.chat_id, limit=1)
             top_id = top[0].id if top else 0
             self.state["last_newest_id"] = top_id
             self.state["next_oldest_id"] = top_id
+            _logger.info(f"[{self.chat_id}] 首次启动，设置 last_newest_id=next_oldest_id={top_id}")
+        else:
+            _logger.info(f"[{self.chat_id}] 读取持久化光标: last_newest_id={self.state['last_newest_id']}, next_oldest_id={self.state['next_oldest_id']}")
 
         await self._persist_state()
         _logger.info(f"[{self.chat_id}] 初始化完成: {self.state}")
@@ -169,13 +181,24 @@ class HistorySyncer:
                     last_newest = self.state["last_newest_id"]
 
                 if top_id > last_newest:
-                    async for msg in self.client.iter_messages(self.chat_id, min_id=last_newest, limit=100):
+                    # 记录同步范围
+                    _logger.info(
+                        f"[{self.chat_id}] forward_sync 开始，同步区间: {last_newest + 1} ~ {top_id}")
+
+                    # 使用无限制迭代，确保不漏任何消息
+                    count = 0
+                    async for msg in self.client.iter_messages(self.chat_id, min_id=last_newest):
                         await self._index_to_meili(msg)
+                        count += 1
+
+                    _logger.info(f"[{self.chat_id}] forward_sync 完成，共索引 {count} 条新消息")
+
                     async with self._state_lock:
                         self.state["last_newest_id"] = top_id
                         await self._persist_state()
                 await asyncio.sleep(POLL_INTERVAL)
             except FloodWaitError as e:
+                _logger.warning(f"[{self.chat_id}] forward_sync FloodWait {e.seconds}s")
                 await asyncio.sleep(e.seconds)
             except Exception as e:
                 _logger.error(f"[{self.chat_id}] forward_sync error: {e}", exc_info=True)
@@ -203,14 +226,34 @@ class HistorySyncer:
                     batch.append(msg)
                     await self._index_to_meili(msg)
 
-                smallest = min((m.id for m in batch), default=cutoff_id)
-                new_next = max(smallest - overlap, cutoff_id)
+                if batch:
+                    highest_id = max(m.id for m in batch)
+                    lowest_id = min(m.id for m in batch)
+                    _logger.info(
+                        f"[{self.chat_id}] backward_sync 已索引区间: {lowest_id} ~ {highest_id} (共 {len(batch)} 条)")
 
-                async with self._state_lock:
-                    self.state["next_oldest_id"] = new_next
-                    await self._persist_state()
+                    smallest = lowest_id
+
+                    # 计算下一次 offset：
+                    # 1. 若 overlap ≥ 本批大小，则直接使用 smallest（无重叠但连续，不会漏）；
+                    # 2. 否则保留 overlap 个重叠窗口；
+                    if overlap >= len(batch):
+                        new_next = smallest
+                    else:
+                        new_next = max(smallest - overlap, cutoff_id)
+
+                    async with self._state_lock:
+                        self.state["next_oldest_id"] = new_next
+                        await self._persist_state()
+                else:
+                    # 没有更多旧消息，标记到 cutoff
+                    async with self._state_lock:
+                        self.state["next_oldest_id"] = cutoff_id
+                        await self._persist_state()
+
                 await asyncio.sleep(0.2)
             except FloodWaitError as e:
+                _logger.warning(f"[{self.chat_id}] backward_sync FloodWait {e.seconds}s")
                 await asyncio.sleep(e.seconds)
             except Exception as e:
                 _logger.error(f"[{self.chat_id}] backward_sync error: {e}", exc_info=True)
