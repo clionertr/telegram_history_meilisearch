@@ -365,7 +365,7 @@ class UserBotClient:
 
         # 使用头像服务批量下载
         def progress_callback(completed: int, total: int):
-            if completed % 10 == 0 or completed == total:  # 每10个或完成时记录进度
+            if completed % 30 == 0 or completed == total:  # 每10个或完成时记录进度
                 logger.info(f"头像下载进度: {completed}/{total}")
 
         await self.avatar_service.batch_download_avatars(
